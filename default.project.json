@@ -1,0 +1,10 @@
+{
+  "name": "FallingFurni",
+  "tree": {
+    "$className": "DataModel",
+
+    "ServerScriptService": {
+      "$path": "src/ServerScriptService"
+    }
+  }
+}
