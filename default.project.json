@@ -1,30 +1,77 @@
 {
   "name": "Ball-Tycoon",
-
   "tree": {
     "$className": "DataModel",
-
-    "ServerScriptService": {
-      "$path": "src/ServerScriptService"
-    },
-
     "ReplicatedStorage": {
       "$path": "src/ReplicatedStorage"
     },
-
-    "StarterGui": {
-      "$path": "src/StarterGui"
+    "ServerScriptService": {
+      "$path": "src/ServerScriptService"
     },
-
-    "StarterPlayer": {
-      "$path": "src/StarterPlayer"
-    },
-
     "ServerStorage": {
       "$path": "src/ServerStorage"
     },
-
+    "StarterGui": {
+      "$properties": {
+        "ScreenOrientation": "Sensor"
+      },
+      "$attributes": {
+        "Rojo_Target_StudioDefaultStyleSheet": "4b20038bd7fedf780a5eecb300002e88",
+        "Rojo_Target_StudioInsertWidgetLayerCollectorAutoLinkStyleSheet": "4b20038bd7fedf780a5eecb300002e7f"
+      },
+      "$path": "src/StarterGui"
+    },
+    "StarterPlayer": {
+      "$properties": {
+        "AvatarJointUpgrade": "Enabled",
+        "CameraMaxZoomDistance": 128.0,
+        "CharacterBreakJointsOnDeath": false,
+        "CharacterUseJumpPower": false
+      },
+      "$path": "src/StarterPlayer"
+    },
     "Workspace": {
+      "$properties": {
+        "ExpandedTerrain": {
+          "Enum": 0
+        },
+        "PredictiveStreamingMode": {
+          "Enum": 0
+        },
+        "SignalBehavior": "Deferred",
+        "StreamOutBehavior": "Opportunistic",
+        "StreamingEnabled": true,
+        "StreamingIntegrityMode": "PauseOutsideLoadedArea",
+        "WorldPivotData": {
+          "OptionalCFrame": {
+            "position": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "orientation": [
+              [
+                1.0,
+                0.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                0.0,
+                1.0
+              ]
+            ]
+          }
+        }
+      },
+      "$attributes": {
+        "Rojo_Target_CurrentCamera": "29d61f8426dd29b40a574610000003b8"
+      },
       "$path": "src/Workspace"
     }
   }

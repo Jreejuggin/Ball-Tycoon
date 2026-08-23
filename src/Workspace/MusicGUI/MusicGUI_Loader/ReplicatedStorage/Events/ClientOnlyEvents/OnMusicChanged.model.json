@@ -1,0 +1,9 @@
+{
+  "className": "BindableEvent",
+  "properties": {
+    "Sandboxed": true,
+    "Capabilities": {
+      "SecurityCapabilities": 17996771963439872
+    }
+  }
+}

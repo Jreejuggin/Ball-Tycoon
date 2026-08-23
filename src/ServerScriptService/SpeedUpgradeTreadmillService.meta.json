@@ -1,0 +1,6 @@
+{
+  "attributes": {
+    "RolloutScope": "P1-P10",
+    "SprintSpeedIncreasePercent": 50.0
+  }
+}
