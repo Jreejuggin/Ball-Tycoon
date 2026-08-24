@@ -1,5 +1,8 @@
 {
   "name": "Ball-Tycoon",
+  "servePlaceIds": [
+    95130979463573
+  ],
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": {
