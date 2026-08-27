@@ -1,5 +1,8 @@
 {
   "name": "Ball-Tycoon",
+  "globIgnorePaths": [
+    "src/ReplicatedStorage/Design/**"
+  ],
   "servePlaceIds": [
     95130979463573,
     106477996205675,
@@ -10,23 +13,33 @@
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": {
-      "$path": "src/ReplicatedStorage"
+      "$path": "src/ReplicatedStorage",
+      "$ignoreUnknownInstances": true
     },
     "ServerScriptService": {
-      "$path": "src/ServerScriptService"
+      "$path": "src/ServerScriptService",
+      "$ignoreUnknownInstances": true
     },
     "ServerStorage": {
-      "$path": "src/ServerStorage"
+      "$path": "src/ServerStorage",
+      "$ignoreUnknownInstances": true
+    },
+    "SoundService": {
+      "$className": "SoundService",
+      "$ignoreUnknownInstances": true,
+      "SFX": {
+        "$className": "SoundGroup",
+        "$properties": {
+          "Volume": 1
+        }
+      }
     },
     "StarterGui": {
       "$properties": {
         "ScreenOrientation": "Sensor"
       },
-      "$attributes": {
-        "Rojo_Target_StudioDefaultStyleSheet": "4b20038bd7fedf780a5eecb300002e88",
-        "Rojo_Target_StudioInsertWidgetLayerCollectorAutoLinkStyleSheet": "4b20038bd7fedf780a5eecb300002e7f"
-      },
-      "$path": "src/StarterGui"
+      "$path": "src/StarterGui",
+      "$ignoreUnknownInstances": true
     },
     "StarterPlayer": {
       "$properties": {
@@ -35,7 +48,8 @@
         "CharacterBreakJointsOnDeath": false,
         "CharacterUseJumpPower": false
       },
-      "$path": "src/StarterPlayer"
+      "$path": "src/StarterPlayer",
+      "$ignoreUnknownInstances": true
     },
     "Workspace": {
       "$properties": {
@@ -76,10 +90,8 @@
           }
         }
       },
-      "$attributes": {
-        "Rojo_Target_CurrentCamera": "29d61f8426dd29b40a574610000003b8"
-      },
-      "$path": "src/Workspace"
+      "$path": "src/Workspace",
+      "$ignoreUnknownInstances": true
     }
   }
 }
