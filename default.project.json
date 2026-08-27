@@ -1,7 +1,8 @@
 {
   "name": "Ball-Tycoon",
   "servePlaceIds": [
-    95130979463573
+    95130979463573,
+    106477996205675
   ],
   "tree": {
     "$className": "DataModel",
