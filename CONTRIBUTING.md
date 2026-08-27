@@ -158,9 +158,23 @@ Steps to develop and test:
 
 Caveats specific to this project:
 
-- **`.rbxm` files won't show diffs in your editor.** If you need to change something inside one of the pre-migration models (e.g. a plot's geometry, `MainHUD.rbxm`), you'll generally need to make the change in Studio, then re-export/re-syncback that specific piece — this is one of the few legitimate, narrow uses of Rojo's build/syncback tooling outside of the original migration. Don't do this casually; understand what you're touching first, and prefer editing loose `.luau` files whenever the thing you're changing is a script rather than the model itself.
+- **`.rbxm` files won't show diffs in your editor.** If you need to change something inside one of the pre-migration models (e.g. a plot's geometry, `MainHUD.rbxm`), you'll generally need to make the change in Studio, then re-export just that model — see [Editing `.rbxm` files](#editing-rbxm-files-ui-plot-geometry-etc) below. Don't do this casually; understand what you're touching first, and prefer editing loose `.luau` files whenever the thing you're changing is a script rather than the model itself.
 - **DataStores are live even in Studio testing.** Per the README's dev notes, player progress (Cash, plot ownership, worker hires, upgrades, plot color) is saved via DataStores under the key `PlayerCashData_v2`. If "Enable Studio Access to API Services" is turned on for the place you're testing in, Studio play-sessions will read/write real DataStore data for that place. Make sure you're testing against the designated **development** experience (which should have its own separate DataStore namespace from production) — see [Section 11](#11-production-safety).
 - **Plot symmetry:** P1–P10 are meant to be structurally identical. If your change affects plot layout or plot-scoped scripts, it generally needs to be applied consistently across all ten plots, not just the one you were testing in.
+
+### Editing `.rbxm` files (UI, plot geometry, etc.)
+
+Everything under `src/StarterGui/`, `src/StarterPlayer/`, and most of `src/Workspace/` is stored as binary `.rbxm` files rather than loose scripts (see [Section 4](#4-project-structure)). Each file is one **top-level** instance under its service — e.g. `src/StarterGui/MainHUD.rbxm` becomes `StarterGui.MainHUD`, and anything nested inside it (a button, a frame, a group) lives *inside that same file*, not as its own file. This matters because it changes how you save an edit back to disk.
+
+Tested, working workflow:
+
+1. Run `rojo serve` and connect Studio to it as usual (Section 5).
+2. Make your edit live in Studio — move a UI element, change a property, tweak geometry, etc. (This is the one case where editing directly in Studio is expected and fine, since the whole point is to capture that edit.)
+3. Figure out which **top-level file** actually owns the thing you changed. If you edited something nested (e.g. `PetsButton` inside `MainHUD > CashHUDGroup`), you need the top-level owner — `MainHUD` — not the nested instance itself.
+4. In the Studio Explorer, right-click that top-level instance → **Save to File** → overwrite the matching file under `src/` (e.g. save `MainHUD` over `src/StarterGui/MainHUD.rbxm`).
+   - **Don't** export just the nested sub-instance to its own new file — Rojo would sync it in as a new top-level sibling instance instead of putting it back where it belongs, which silently changes the DataModel hierarchy (and can break script references that expect the old path).
+5. Since `rojo serve` is still watching `src/`, it will immediately try to resync the file you just overwrote back into Studio. Check the Rojo plugin's **View Changes** / sync panel — it should show only the property/instance changes you expect. If it does, the file and Studio now agree and the round-trip worked.
+6. Commit the modified `.rbxm` as usual. Because the diff is opaque, describe what you changed inside it in your commit message and PR description (see [Section 8](#8-pull-request-guidelines)).
 
 ## 6. Git Branching Strategy
 
