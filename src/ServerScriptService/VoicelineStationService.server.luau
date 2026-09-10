@@ -13,29 +13,24 @@ local VoicelineStationTheme = require(
 	ServerStorage:WaitForChild("Modules"):WaitForChild("VoicelineStationTheme")
 )
 
+local Catalog = require(ReplicatedStorage:WaitForChild("VoicelineCatalog"))
+local BuyPadLayout = require(ServerStorage:WaitForChild("Modules"):WaitForChild("VoicelineBuyPadLayout"))
+local openEvent = ReplicatedStorage:WaitForChild("VoicelineMenuEvent") :: RemoteEvent
+local lastInteractionAt: { [Player]: number } = {}
+Players.PlayerRemoving:Connect(function(player)
+	lastInteractionAt[player] = nil
+end)
+
 local STATION_NAME = "VoicelineStation"
 local AVAILABLE_PREVIEW_TRANSPARENCY = 0.6
 local ORIGINAL_TRANSPARENCY_ATTRIBUTE = "VoicelineUnlockedTransparency"
-local PAD_TRANSPARENCY = 0.45
+local PAD_TRANSPARENCY = 0.5
 local PAD_REFRESH_SECONDS = 0.5
 local COLOR_GREEN = Color3.new(0, 1, 0)
 local COLOR_RED = Color3.new(0.8, 0.1, 0.1)
 
 local function getVisualParts(station: Model): { BasePart }
-	local collisionFolder = station:FindFirstChild("Collision")
-	local buyPad = station:FindFirstChild("BuyPad")
-	local parts: { BasePart } = {}
-
-	for _, descendant in ipairs(station:GetDescendants()) do
-		if descendant:IsA("BasePart")
-			and not (collisionFolder and descendant:IsDescendantOf(collisionFolder))
-			and not (buyPad and descendant:IsDescendantOf(buyPad))
-		then
-			table.insert(parts, descendant)
-		end
-	end
-
-	return parts
+	return VoicelineStationTheme.GetVisualParts(station)
 end
 
 local function getWorkerOneActivation(plot: Instance): BoolValue?
@@ -68,10 +63,10 @@ local function getOwnerPlayer(plot: Instance): Player?
 	return ownerId and Players:GetPlayerByUserId(ownerId) or nil
 end
 
-local function getCash(player: Player?): IntValue?
+local function getCash(player: Player?): any
 	local leaderstats = player and player:FindFirstChild("leaderstats")
 	local cash = leaderstats and leaderstats:FindFirstChild("Cash")
-	return cash and cash:IsA("IntValue") and cash or nil
+	return cash and (cash:IsA("IntValue") or cash:IsA("NumberValue")) and cash or nil
 end
 
 local padRefreshers: { () -> () } = {}
@@ -118,8 +113,43 @@ local function wirePlot(plot: Instance): boolean
 	end
 
 	local visualParts = getVisualParts(station)
-	local priceLabel = head:FindFirstChild("PriceLabel")
-	local priceText = priceLabel and priceLabel:FindFirstChild("PriceText")
+	local microphone = station:FindFirstChild("VoicelineMicrophone_Roblox")
+	local button = microphone and microphone:FindFirstChild("MIC_ButtonGlow_Yellow", true)
+	if not button or not button:IsA("BasePart") then
+		warn("[VoicelineStationService] Missing microphone button: " .. station:GetFullName())
+		return false
+	end
+	local prompt = button:FindFirstChild("VoicelinePrompt") :: ProximityPrompt
+	local glow = button:FindFirstChild("VoicelineGlow") :: PointLight
+	if not prompt or not glow then
+		warn("[VoicelineStationService] Missing microphone interaction configuration")
+		return false
+	end
+
+	-- A prompt can be spoofed by a client; validate owner, saved state, life,
+	-- and server-observed distance before sending the catalog to that player.
+	prompt.Triggered:Connect(function(player)
+		if not prompt.Enabled or not activated.Value or not workerOne.Value
+			or plot:GetAttribute("Owner") ~= player.UserId
+			or plot:GetAttribute("RestoringProgress") then return end
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if not root or not root:IsA("BasePart") or not humanoid or humanoid.Health <= 0
+			or (root.Position - button.Position).Magnitude > prompt.MaxActivationDistance + 2 then return end
+		local now = os.clock()
+		if now - (lastInteractionAt[player] or -math.huge) < 0.5 then return end
+		lastInteractionAt[player] = now
+		openEvent:FireClient(player, {
+			station = station,
+			plot = plot,
+			color = PlotTheme.GetPlotColor(plot),
+			entries = Catalog,
+		})
+	end)
+	local padUI = BuyPadLayout.Apply(station)
+	local priceLabel = padUI.priceLabel
+	local priceText = padUI.priceText
 	local themeWarningShown = false
 	local isProcessingPurchase = false
 
@@ -150,13 +180,12 @@ local function wirePlot(plot: Instance): boolean
 		head.CanTouch = available
 		head.CanQuery = available
 
-		if priceLabel and priceLabel:IsA("BillboardGui") then
-			priceLabel.Enabled = available
-		end
-		if priceText and priceText:IsA("TextLabel") then
-			priceText.Text = "VOICE STATION\n" .. formatPrice(price.Value)
-			priceText.TextColor3 = color
-		end
+		padUI.upgradeLabel.Enabled = available
+		priceLabel.Enabled = available
+		padUI.titleText.Text = "Worker Voicelines"
+		padUI.benefitText.Text = "🎤 " .. tostring(#Catalog) .. " audios"
+		priceText.Text = formatPrice(price.Value)
+		priceText.TextColor3 = color
 		station:SetAttribute("PurchasePrice", price.Value)
 	end
 
@@ -168,6 +197,8 @@ local function wirePlot(plot: Instance): boolean
 		local hasOwner = plot:GetAttribute("Owner") ~= nil
 		local workerPurchased = hasOwner and workerOne.Value
 		local purchased = workerPurchased and activated.Value
+		prompt.Enabled = purchased
+		glow.Enabled = purchased
 
 		applyTheme()
 		for _, part in ipairs(visualParts) do
@@ -204,7 +235,8 @@ local function wirePlot(plot: Instance): boolean
 	end
 
 	head.Touched:Connect(function(hit: BasePart)
-		if isProcessingPurchase or activated.Value or not workerOne.Value then
+		if isProcessingPurchase or activated.Value or not workerOne.Value
+			or plot:GetAttribute("RestoringProgress") then
 			return
 		end
 
@@ -213,6 +245,11 @@ local function wirePlot(plot: Instance): boolean
 		if not player or plot:GetAttribute("Owner") ~= player.UserId then
 			return
 		end
+
+		local root = character:FindFirstChild("HumanoidRootPart")
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		if not root or not root:IsA("BasePart") or not humanoid or humanoid.Health <= 0
+			or (root.Position - head.Position).Magnitude > 10 then return end
 
 		local cash = getCash(player)
 		local purchasePrice = math.max(0, price.Value)
