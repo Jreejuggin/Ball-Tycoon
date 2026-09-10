@@ -3,7 +3,9 @@
 {
   "name": "Ball-Tycoon",
   "globIgnorePaths": [
-    "src/ReplicatedStorage/Design/**"
+    "src/ReplicatedStorage/Design/**",
+    "src/ServerStorage/LegacyAssets",
+    "src/ServerStorage/LegacyAssets/**"
   ],
   "servePlaceIds": [
     95130979463573,
@@ -25,7 +27,11 @@
     },
     "ServerStorage": {
       "$path": "src/ServerStorage",
-      "$ignoreUnknownInstances": true
+      "$ignoreUnknownInstances": true,
+      "LegacyAssets": {
+        "$className": "Folder",
+        "$ignoreUnknownInstances": true
+      }
     },
     "SoundService": {
       "$className": "SoundService",
