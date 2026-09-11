@@ -222,7 +222,17 @@ function ArrowTrail:_heightAt(distance)
 	return heights[lower] + (heights[upper] - heights[lower]) * alpha
 end
 
-function ArrowTrail:_recomputePath()
+-- Cheap, pure-vector geometry: where the path starts, which way it points,
+-- and how long it is. Run every frame -- this is what SetTarget's position
+-- and the player's position feed into, and both change continuously while
+-- walking, so this must too. Letting this go stale between throttled
+-- recomputes is what caused the trail to visibly snap into a new heading
+-- every RECOMPUTE_INTERVAL: the bearing to a nearby target sweeps through a
+-- much bigger angle per stud walked than the bearing to a far one, so the
+-- snap was small and unnoticeable far from the target and an obvious jump
+-- right in front of it. The raycasts that find ground height ARE expensive
+-- and stay throttled in _resampleGround below.
+function ArrowTrail:_updateGeometry()
 	self._pathValid = false
 
 	local root = self:_characterRoot()
@@ -237,8 +247,8 @@ function ArrowTrail:_recomputePath()
 
 	local playerPosition = root.Position
 	local targetPosition = target:GetPivot().Position
-	self._lastStart = playerPosition
-	self._lastFinish = targetPosition
+	self._currentPlayerPosition = playerPosition
+	self._currentTargetPosition = targetPosition
 
 	local flatDelta = flatten(targetPosition - playerPosition)
 	local groundDistance = flatDelta.Magnitude
@@ -253,13 +263,16 @@ function ArrowTrail:_recomputePath()
 		return
 	end
 
-	local startPosition = playerPosition + direction * START_OFFSET
-	self:_sampleGround(startPosition, direction, usableLength, targetPosition.Y)
-
-	self._start = startPosition
+	self._start = playerPosition + direction * START_OFFSET
 	self._direction = direction
 	self._usableLength = usableLength
 	self._pathValid = true
+end
+
+function ArrowTrail:_resampleGround()
+	self._lastStart = self._currentPlayerPosition
+	self._lastFinish = self._currentTargetPosition
+	self:_sampleGround(self._start, self._direction, self._usableLength, self._currentTargetPosition.Y)
 end
 
 function ArrowTrail:_step(deltaTime)
@@ -267,32 +280,30 @@ function ArrowTrail:_step(deltaTime)
 		return
 	end
 
-	self._timeSinceRecompute += deltaTime
-
-	local needsRecompute = self._timeSinceRecompute >= RECOMPUTE_INTERVAL
-	if not needsRecompute and self._lastStart then
-		local root = self:_characterRoot()
-		if not root or (root.Position - self._lastStart).Magnitude > RECOMPUTE_MOVE_THRESHOLD then
-			needsRecompute = true
-		end
-	end
-	if not needsRecompute and self._lastFinish then
-		local target = self._target
-		if not target or not target.Parent then
-			needsRecompute = true
-		elseif (target:GetPivot().Position - self._lastFinish).Magnitude > RECOMPUTE_MOVE_THRESHOLD then
-			needsRecompute = true
-		end
-	end
-
-	if needsRecompute then
-		self._timeSinceRecompute = 0
-		self:_recomputePath()
-	end
+	self:_updateGeometry()
 
 	if not self._pathValid then
 		self:_hideAll()
 		return
+	end
+
+	self._timeSinceRecompute += deltaTime
+
+	local needsResample = self._timeSinceRecompute >= RECOMPUTE_INTERVAL
+	if not needsResample and self._lastStart then
+		if (self._currentPlayerPosition - self._lastStart).Magnitude > RECOMPUTE_MOVE_THRESHOLD then
+			needsResample = true
+		end
+	end
+	if not needsResample and self._lastFinish then
+		if (self._currentTargetPosition - self._lastFinish).Magnitude > RECOMPUTE_MOVE_THRESHOLD then
+			needsResample = true
+		end
+	end
+
+	if needsResample then
+		self._timeSinceRecompute = 0
+		self:_resampleGround()
 	end
 
 	-- One scroll cycle is exactly one spacing, so the chevron that runs off
