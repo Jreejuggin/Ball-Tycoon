@@ -1,29 +1,28 @@
 -- TutorialGuiLoader
--- Entry point for the tutorial's client UI. Requiring WelcomePanel is what
--- actually constructs its Frame under this ScreenGui -- ModuleScripts don't
--- run until something requires them, so this is that something. Future
--- tutorial UI modules (the step banner, in Phase 5) get required here too.
+-- Entry point for the tutorial's client UI. Requiring TutorialController is
+-- what actually constructs everything under this ScreenGui (it requires
+-- WelcomePanel and StepPanel itself) -- ModuleScripts don't run until
+-- something requires them, so this is that something.
 --
--- TEMPORARY (Phase 3): there's no tutorial controller yet to decide WHEN the
--- welcome panel should appear, so the block below shows it once, automatically,
--- in Studio only -- purely so it can be previewed end to end while later
--- phases are still being built. Phase 5 replaces this block with the real
--- trigger: wait for the player's DataLoaded and TutorialEligible attributes,
--- then call WelcomePanel.Show() from the state machine instead.
+-- The only job left here is the real trigger Phase 3/4's placeholder was
+-- waiting on: wait for the player's DataLoaded attribute (set at the very
+-- end of DataSaveScript's PlayerAdded handler, after TutorialProgressService
+-- has already resolved TutorialEligible/StepIndex for this session), then
+-- hand off to the state machine.
 
-local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
 
-local WelcomePanel = require(script.Parent:WaitForChild("WelcomePanel"))
+local TutorialController = require(script.Parent:WaitForChild("TutorialController"))
 
-WelcomePanel.StartRequested:Connect(function()
-	print("[Tutorial] Start requested -- Phase 5 will begin step 1 here.")
-end)
+local player = Players.LocalPlayer
 
-WelcomePanel.SkipRequested:Connect(function()
-	print("[Tutorial] Skip requested -- Phase 5 will persist this to the server here.")
-end)
-
-if RunService:IsStudio() then
-	task.wait(1) -- let the rest of the HUD finish laying out first
-	WelcomePanel.Show()
+local function waitForDataLoaded()
+	while not player:GetAttribute("DataLoaded") do
+		player:GetAttributeChangedSignal("DataLoaded"):Wait()
+	end
 end
+
+task.spawn(function()
+	waitForDataLoaded()
+	TutorialController.Init()
+end)
