@@ -313,50 +313,66 @@ function ArrowTrail:_step(deltaTime)
 	for index, arms in ipairs(self._chevrons) do
 		local distance = self:_advanceChevron(index, deltaTime)
 
-		local height = self:_heightAt(distance)
-		local point = self._start + self._direction * distance
-		if height then
-			point = Vector3.new(point.X, height, point.Z)
-		end
+		if distance > self._usableLength then
+			-- Beyond the current path (a short path with less room than the
+			-- full lap, or momentarily between laps): keep it out of the way
+			-- entirely rather than cramming it into whatever room exists.
+			for _, arm in ipairs(arms) do
+				arm.part.Transparency = 1
+			end
+		else
+			local height = self:_heightAt(distance)
+			local point = self._start + self._direction * distance
+			if height then
+				point = Vector3.new(point.X, height, point.Z)
+			end
 
-		local frame = CFrame.lookAt(point, point + self._direction)
-		local fadeIn = math.clamp(distance / FADE_STUDS, 0, 1)
-		local fadeOut = math.clamp((self._usableLength - distance) / FADE_STUDS, 0, 1)
-		local transparency = 1 - math.min(fadeIn, fadeOut)
+			local frame = CFrame.lookAt(point, point + self._direction)
+			local fadeIn = math.clamp(distance / FADE_STUDS, 0, 1)
+			local fadeOut = math.clamp((self._usableLength - distance) / FADE_STUDS, 0, 1)
+			local transparency = 1 - math.min(fadeIn, fadeOut)
 
-		for _, arm in ipairs(arms) do
-			arm.part.CFrame = frame * arm.offset
-			arm.part.Transparency = transparency
+			for _, arm in ipairs(arms) do
+				arm.part.CFrame = frame * arm.offset
+				arm.part.Transparency = transparency
+			end
 		end
 	end
 end
 
 -- Advances one chevron's OWN distance along the path and wraps it back to
--- the player end once it reaches the target end, and returns that distance.
+-- the player end once it completes a lap, and returns that distance.
 --
--- The previous version drove every chevron off ONE shared scroll value
--- confined to a fixed, non-overlapping SPACING-wide window per chevron
--- index (distance = scroll + (index-1)*spacing, scroll wrapped mod
--- spacing). Since every chevron shared the same scroll, ALL of them
--- wrapped at the exact same instant -- and since only the very first and
--- last of those windows actually sit inside the fade-in/fade-out zones,
--- every chevron in the MIDDLE of the path would instantly teleport
--- backward by a full SPACING, fully opaque, once every SPACING/scrollSpeed
--- seconds -- a visible jump with nothing to do with terrain or movement,
--- which is exactly what kept showing up even on flat ground with nothing
--- else nearby.
+-- Two earlier versions of this both broke in different ways:
+--   1. All ten chevrons driven off ONE shared scroll value, each confined
+--      to its own fixed SPACING-wide window. They all wrapped at the exact
+--      same instant, and only the first/last of those windows sat inside
+--      the fade zones, so every middle chevron teleported backward at FULL
+--      OPACITY on a fixed rhythm -- regardless of terrain or movement.
+--   2. Fixed that by giving each chevron a persistent distance wrapped
+--      against the CURRENT usableLength -- which does stop the
+--      synchronized teleport, but on a SHORT path (closer to the target
+--      than CHEVRON_COUNT*SPACING studs) it forces all ten to cram into
+--      that short remaining stretch, landing on only a handful of distinct
+--      positions mod a small divisor -- the "pile of arrows" look.
 --
--- Giving each chevron its own persistent distance, wrapped against the
--- CURRENT (possibly still-changing) usableLength rather than a fixed
--- window, fixes both problems at once: each one travels the whole path
--- and only wraps when IT individually reaches the far end, which is
--- already inside the existing fadeOut zone -- and because the ten
--- chevrons started at staggered offsets, they don't all reach that point
--- at the same time.
+-- The fix: wrap against a LAP LENGTH that's whichever is bigger, the
+-- current usableLength or the full CHEVRON_COUNT*SPACING extension
+-- (=60 studs by default). The ten starting offsets (0, 6, 12, ... 54) are
+-- already every distinct multiple of SPACING up to CHEVRON_COUNT*SPACING,
+-- so wrapping against that fixed minimum keeps them permanently spread
+-- apart with zero collisions, no matter how short the visible path gets --
+-- the render loop above just hides whichever ones currently fall beyond
+-- usableLength, exactly like the ORIGINAL (pre-redesign) density behavior.
+-- On a LONGER path, the lap length grows to match usableLength itself, so
+-- each chevron travels the whole path and only ever wraps at the target
+-- end, which is already inside the fadeOut zone -- fixing problem 1 for
+-- paths of any length, not just ones shorter than the default extension.
 function ArrowTrail:_advanceChevron(index, deltaTime)
+	local lapLength = math.max(self._usableLength, self._chevronCount * self._spacing)
 	local distance = self._chevronDistances[index] + self._scrollSpeed * deltaTime
-	if self._usableLength > 0 then
-		distance = distance % self._usableLength
+	if lapLength > 0 then
+		distance = distance % lapLength
 	end
 	self._chevronDistances[index] = distance
 	return distance
