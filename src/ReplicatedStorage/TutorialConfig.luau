@@ -44,11 +44,26 @@ local TutorialConfig = {
 		completion = { type = "ValueIncreased", root = "Plot", path = "DropperSlots/Slot1/UpgradeLevel" },
 	},
 	{
-		id = "BuyFirstWorker",
-		title = "Hire Your First Worker",
-		dialog = "Workers collect cash for you automatically. Head to the worker centre and hire one!",
-		target = { root = "Plot", path = "CentreSlots/Centre01_Worker" },
+		id = "UnlockWorkerCentre",
+		title = "Unlock the Worker Centre",
+		dialog = "Workers collect cash for you automatically. Head to the worker centre and unlock it!",
+		target = { root = "Plot", path = "CentreSlots/Centre01_Worker/BuyPad" },
 		completion = { type = "ValueTrue", root = "Plot", path = "CentreSlots/Centre01_Worker/Activated" },
+	},
+	{
+		-- The worker centre BuyPad only unlocks the ZONE -- CentreZoneService
+		-- sets Centre01_Worker/Activated, not a hired worker. Hiring itself
+		-- happens at the HiringKiosk (a separate touch-based pad, wired by
+		-- the Studio-native WorkerSpawnerController -- see PROJECT_STATE.luau
+		-- section 2.3), which sets CentreSlots/Centre01_Worker/WorkerActivations/
+		-- Worker1. Two real purchases, so two real steps -- a single step
+		-- watching only Activated completed the moment the ZONE unlocked,
+		-- before any worker existed.
+		id = "HireFirstWorker",
+		title = "Hire Your First Worker",
+		dialog = "Almost there! Head to the hiring kiosk and hire your first worker.",
+		target = { root = "Plot", path = "HiringKiosk" },
+		completion = { type = "ValueTrue", root = "Plot", path = "CentreSlots/Centre01_Worker/WorkerActivations/Worker1" },
 	},
 }
 

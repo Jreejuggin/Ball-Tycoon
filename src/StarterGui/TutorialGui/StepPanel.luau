@@ -15,7 +15,7 @@
 
 local screenGui = script.Parent
 
-local BANNER_SIZE = UDim2.fromOffset(420, 96)
+local BANNER_SIZE = UDim2.fromOffset(480, 96)
 local BACKGROUND_COLOR = Color3.fromRGB(28, 30, 38)
 local STROKE_COLOR = Color3.fromRGB(60, 64, 78)
 local TITLE_COLOR = Color3.fromRGB(255, 221, 64) -- matches ArrowTrail's chevron color
@@ -40,8 +40,11 @@ end
 
 local banner = Instance.new("Frame")
 banner.Name = "StepPanel"
-banner.AnchorPoint = Vector2.new(0.5, 0)
-banner.Position = UDim2.new(0.5, 0, 0, 110)
+-- Anchored near the bottom rather than mid-screen (where it used to sit,
+-- right in front of whatever the player was trying to look at) -- above
+-- the health bar, which occupies roughly the bottom 100px of the HUD.
+banner.AnchorPoint = Vector2.new(0.5, 1)
+banner.Position = UDim2.new(0.5, 0, 1, -110)
 banner.Size = BANNER_SIZE
 banner.BackgroundColor3 = BACKGROUND_COLOR
 banner.BackgroundTransparency = 0.08
