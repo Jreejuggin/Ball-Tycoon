@@ -14,6 +14,18 @@
 -- CFrame.lookAt. The two arms are mirror images (+/- the same angle), so even
 -- a sign error in the rotation produces the same visible shape.
 --
+-- Ground-height note: this used to find the floor by raycasting straight
+-- down under each chevron -- which meant the trail happily climbed onto the
+-- top of whatever it raycast into: a dropper, a buy pad, an invisible
+-- collision box, anything sitting between the player and the target. Since
+-- every tutorial target lives on the player's OWN plot (see TutorialConfig),
+-- and that plot's own floor is a single flat part (the same one
+-- PlotAssignmentScript already uses for teleport placement:
+-- `plot.PrimaryPart or plot:FindFirstChild("Floor")`), the trail just reads
+-- that one part's top height directly instead. It structurally cannot climb
+-- onto a dropper or a button, because it never looks at them -- there's
+-- nothing left in the geometry that COULD hit an obstacle.
+--
 -- Client-only by design: it follows Players.LocalPlayer and drives itself off
 -- RenderStepped, and the parts it makes are client-side, so the trail is
 -- visible only to the player being tutorialised. Creating one on the server
@@ -46,15 +58,6 @@ local ARM_HEIGHT = 0.25 -- flat slabs, so they read as painted on the ground
 local ARM_ANGLE = math.rad(40) -- half-angle of the chevron's "V"
 local GROUND_OFFSET = 0.6 -- studs above the floor the chevrons float
 
-local RECOMPUTE_INTERVAL = 0.1 -- seconds between path/ground recomputes
-local RECOMPUTE_MOVE_THRESHOLD = 2 -- studs of player or target movement that
-	-- forces an immediate recompute regardless of the interval
-
-local GROUND_SAMPLE_SPACING = 4 -- studs between downward ground raycasts
-local MAX_GROUND_SAMPLES = 64
-local RAY_UP = 8 -- start each ground ray this far above the sample point
-local RAY_DOWN = 60 -- and cast this far down from there
-
 local TRAIL_COLOR = Color3.fromRGB(255, 221, 64)
 
 local function flatten(vector)
@@ -86,12 +89,7 @@ function ArrowTrail.new(target, options)
 
 	self._player = Players.LocalPlayer
 	self._visible = true
-	self._timeSinceRecompute = math.huge -- force a recompute on the first frame
 	self._pathValid = false
-	self._lastStart = nil
-	self._lastFinish = nil
-	self._groundHeights = {}
-	self._groundStep = GROUND_SAMPLE_SPACING
 
 	self._folder = Instance.new("Folder")
 	self._folder.Name = "TutorialArrowTrail"
@@ -111,7 +109,6 @@ function ArrowTrail.new(target, options)
 			arm.Anchored = true
 			arm.CanCollide = false
 			arm.CanTouch = false
-			-- CanQuery = false also keeps the trail out of its own ground rays.
 			arm.CanQuery = false
 			arm.CastShadow = false
 			arm.Material = Enum.Material.Neon
@@ -124,11 +121,6 @@ function ArrowTrail.new(target, options)
 		table.insert(self._chevrons, arms)
 		self._chevronDistances[index] = (index - 1) * self._spacing
 	end
-
-	self._rayParams = RaycastParams.new()
-	self._rayParams.FilterType = Enum.RaycastFilterType.Exclude
-	self._rayParams.IgnoreWater = true
-	self._rayParams.FilterDescendantsInstances = {}
 
 	self:SetTarget(target)
 
@@ -145,7 +137,6 @@ function ArrowTrail:SetTarget(target)
 	assert(target ~= nil, "ArrowTrail target cannot be nil")
 	assert(typeof(target.GetPivot) == "function", "ArrowTrail target must support GetPivot (a BasePart or Model)")
 	self._target = target
-	self._timeSinceRecompute = math.huge
 end
 
 function ArrowTrail:SetVisible(visible)
@@ -175,67 +166,37 @@ function ArrowTrail:_characterRoot()
 	return nil
 end
 
--- Samples the floor height at regular intervals along the path once, so the
--- per-frame update can interpolate a height for any distance without
--- raycasting every chevron every frame.
-function ArrowTrail:_sampleGround(startPosition, direction, length, finishHeight)
-	local sampleCount = math.clamp(math.ceil(length / GROUND_SAMPLE_SPACING) + 1, 2, MAX_GROUND_SAMPLES)
-	local step = length / (sampleCount - 1)
-
-	local character = self._player.Character
-	self._rayParams.FilterDescendantsInstances = character and { character } or {}
-
-	local heights = {}
-	for index = 1, sampleCount do
-		local distance = (index - 1) * step
-		local point = startPosition + direction * distance
-		local origin = Vector3.new(point.X, point.Y + RAY_UP, point.Z)
-		local result = workspace:Raycast(origin, Vector3.new(0, -(RAY_UP + RAY_DOWN), 0), self._rayParams)
-		if result then
-			heights[index] = result.Position.Y + GROUND_OFFSET
-		else
-			-- No floor found (a gap, or the area isn't streamed in yet): fall
-			-- back to the straight line between the two endpoints.
-			local alpha = 0
-			if length > 0 then
-				alpha = distance / length
-			end
-			local lineHeight = startPosition.Y + (finishHeight - startPosition.Y) * alpha
-			heights[index] = lineHeight + GROUND_OFFSET
-		end
-	end
-
-	self._groundHeights = heights
-	self._groundStep = step
-end
-
-function ArrowTrail:_heightAt(distance)
-	local heights = self._groundHeights
-	local count = #heights
-	if count == 0 then
+-- The top surface height of the player's OWN plot floor -- the same part
+-- PlotAssignmentScript resolves for teleport placement -- or nil if it
+-- can't be found (no plot assigned yet, or an unexpected plot layout).
+-- Deliberately doesn't look at anything else in the plot: a dropper, a buy
+-- pad, or any other structure between the player and the target is simply
+-- never queried, so there's nothing here that could climb onto one.
+function ArrowTrail:_resolveFloorHeight()
+	local plotName = self._player:GetAttribute("AssignedPlotName")
+	if type(plotName) ~= "string" then
 		return nil
 	end
-	if count == 1 or self._groundStep <= 0 then
-		return heights[1]
+	local plot = workspace:FindFirstChild(plotName)
+	if not plot then
+		return nil
 	end
-
-	local position = distance / self._groundStep
-	local lower = math.clamp(math.floor(position) + 1, 1, count)
-	local upper = math.clamp(lower + 1, 1, count)
-	local alpha = math.clamp(position - (lower - 1), 0, 1)
-	return heights[lower] + (heights[upper] - heights[lower]) * alpha
+	local floor = plot.PrimaryPart or plot:FindFirstChild("Floor")
+	if not floor or not floor:IsA("BasePart") then
+		return nil
+	end
+	return floor.Position.Y + floor.Size.Y / 2
 end
 
 -- Cheap, pure-vector geometry: where the path starts, which way it points,
--- and how long it is. Run every frame -- this is what SetTarget's position
--- and the player's position feed into, and both change continuously while
--- walking, so this must too. Letting this go stale between throttled
--- recomputes is what caused the trail to visibly snap into a new heading
--- every RECOMPUTE_INTERVAL: the bearing to a nearby target sweeps through a
--- much bigger angle per stud walked than the bearing to a far one, so the
--- snap was small and unnoticeable far from the target and an obvious jump
--- right in front of it. The raycasts that find ground height ARE expensive
--- and stay throttled in _resampleGround below.
+-- how long it is, and how high its floor sits. Run every frame -- both the
+-- player's position and (via SetTarget) the target change continuously
+-- while walking, so this must too. An earlier version of this only updated
+-- inside a throttled recompute, which caused the trail to visibly snap into
+-- a new heading every ~0.1s while walking; resolving the floor plot lookup
+-- is cheap enough (an attribute read and a couple of FindFirstChild calls,
+-- no raycasts) that it belongs in the same untouched-every-frame bucket,
+-- not a separate throttled step.
 function ArrowTrail:_updateGeometry()
 	self._pathValid = false
 
@@ -251,8 +212,6 @@ function ArrowTrail:_updateGeometry()
 
 	local playerPosition = root.Position
 	local targetPosition = target:GetPivot().Position
-	self._currentPlayerPosition = playerPosition
-	self._currentTargetPosition = targetPosition
 
 	local flatDelta = flatten(targetPosition - playerPosition)
 	local groundDistance = flatDelta.Magnitude
@@ -270,13 +229,24 @@ function ArrowTrail:_updateGeometry()
 	self._start = playerPosition + direction * START_OFFSET
 	self._direction = direction
 	self._usableLength = usableLength
+	-- No known plot floor (shouldn't normally happen during the tutorial,
+	-- but keep the trail usable if it does): fall back to a straight line
+	-- between the player's and target's own heights, same as before.
+	self._floorHeight = self:_resolveFloorHeight()
+	self._playerHeight = playerPosition.Y
+	self._targetHeight = targetPosition.Y
 	self._pathValid = true
 end
 
-function ArrowTrail:_resampleGround()
-	self._lastStart = self._currentPlayerPosition
-	self._lastFinish = self._currentTargetPosition
-	self:_sampleGround(self._start, self._direction, self._usableLength, self._currentTargetPosition.Y)
+function ArrowTrail:_heightAt(distance)
+	if self._floorHeight then
+		return self._floorHeight + GROUND_OFFSET
+	end
+	local alpha = 0
+	if self._usableLength > 0 then
+		alpha = distance / self._usableLength
+	end
+	return self._playerHeight + (self._targetHeight - self._playerHeight) * alpha + GROUND_OFFSET
 end
 
 function ArrowTrail:_step(deltaTime)
@@ -291,25 +261,6 @@ function ArrowTrail:_step(deltaTime)
 		return
 	end
 
-	self._timeSinceRecompute += deltaTime
-
-	local needsResample = self._timeSinceRecompute >= RECOMPUTE_INTERVAL
-	if not needsResample and self._lastStart then
-		if (self._currentPlayerPosition - self._lastStart).Magnitude > RECOMPUTE_MOVE_THRESHOLD then
-			needsResample = true
-		end
-	end
-	if not needsResample and self._lastFinish then
-		if (self._currentTargetPosition - self._lastFinish).Magnitude > RECOMPUTE_MOVE_THRESHOLD then
-			needsResample = true
-		end
-	end
-
-	if needsResample then
-		self._timeSinceRecompute = 0
-		self:_resampleGround()
-	end
-
 	for index, arms in ipairs(self._chevrons) do
 		local distance = self:_advanceChevron(index, deltaTime)
 
@@ -321,11 +272,8 @@ function ArrowTrail:_step(deltaTime)
 				arm.part.Transparency = 1
 			end
 		else
-			local height = self:_heightAt(distance)
 			local point = self._start + self._direction * distance
-			if height then
-				point = Vector3.new(point.X, height, point.Z)
-			end
+			point = Vector3.new(point.X, self:_heightAt(distance), point.Z)
 
 			local frame = CFrame.lookAt(point, point + self._direction)
 			local fadeIn = math.clamp(distance / FADE_STUDS, 0, 1)
