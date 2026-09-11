@@ -7,11 +7,7 @@ local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SFXSettings = require(ReplicatedStorage:WaitForChild("SFXSettings"))
 
-local VOICE_LINE_IDS = {
-	"rbxassetid://111426373017081",
-	"rbxassetid://73964096479702",
-	"rbxassetid://78005173847052",
-}
+local Catalog = require(ReplicatedStorage:WaitForChild("VoicelineCatalog"))
 
 local MIN_INTERVAL_SECONDS = 35
 local MAX_INTERVAL_SECONDS = 60
@@ -29,7 +25,6 @@ local lastSpokeAtByWorker = setmetatable({}, {__mode = "k"})
 local function isPlotModel(model)
 	return model and model.Parent == workspace and string.match(model.Name, "^P%d+$") ~= nil
 end
-
 local function getPlotForWorker(worker)
 	local current = worker
 	while current and current.Parent ~= workspace do
@@ -103,7 +98,7 @@ local function playVoiceLine(worker)
 
 	local sound = Instance.new("Sound")
 	sound.Name = "WorkerVoiceLine"
-	sound.SoundId = VOICE_LINE_IDS[math.random(1, #VOICE_LINE_IDS)]
+	sound.SoundId = Catalog[math.random(1, #Catalog)].soundId
 	sound.Volume = 0.75
 	sound.RollOffMode = Enum.RollOffMode.InverseTapered
 	sound.RollOffMinDistance = 8
