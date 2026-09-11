@@ -1,9 +1,10 @@
 -- ArrowPreview
--- TEMPORARY, Studio-only preview for ArrowIndicator (Phase 4). Points a
--- single arrow at your own plot's first dropper BuyPad so the real module
--- can be eyeballed in Studio before Phase 5 wires it into the actual
--- tutorial flow. Delete this whole file once Phase 5 lands -- it is not
--- part of the real tutorial, it only exists to preview the module early.
+-- TEMPORARY, Studio-only preview for ArrowIndicator + ArrowTrail. Points a
+-- hovering marker at your own plot's first dropper BuyPad and runs a flowing
+-- chevron trail from you to it, so both can be eyeballed in Studio before
+-- Phase 5 wires them into the actual tutorial flow. Delete this whole file
+-- once Phase 5 lands -- it is not part of the real tutorial, it only exists
+-- to preview the modules early.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -14,6 +15,7 @@ if not RunService:IsStudio() then
 end
 
 local ArrowIndicator = require(ReplicatedStorage:WaitForChild("ArrowIndicator"))
+local ArrowTrail = require(ReplicatedStorage:WaitForChild("ArrowTrail"))
 
 local player = Players.LocalPlayer
 
@@ -46,8 +48,9 @@ task.spawn(function()
 	end
 
 	local arrow = ArrowIndicator.new(buyPad)
-	print("[ArrowPreview] Pointing at " .. buyPad:GetFullName() .. " -- delete this file once Phase 5 lands.")
+	local trail = ArrowTrail.new(buyPad)
+	print("[ArrowPreview] Marker + trail pointing at " .. buyPad:GetFullName() .. " -- delete this file once Phase 5 lands.")
 
-	-- Kept alive for the rest of the session; there's no Skip/step-advance
-	-- wiring here since that's what Phase 5 actually builds.
+	-- The trail follows Players.LocalPlayer itself, so respawning is fine and
+	-- there's no Skip/step-advance wiring here -- that's what Phase 5 builds.
 end)
