@@ -86,7 +86,6 @@ function ArrowTrail.new(target, options)
 
 	self._player = Players.LocalPlayer
 	self._visible = true
-	self._scroll = 0
 	self._timeSinceRecompute = math.huge -- force a recompute on the first frame
 	self._pathValid = false
 	self._lastStart = nil
@@ -100,6 +99,10 @@ function ArrowTrail.new(target, options)
 
 	local offsets = armOffsets()
 	self._chevrons = {}
+	-- Each chevron's OWN distance along the path, persistent frame to frame
+	-- -- see the big comment on _advanceChevron below for why this replaced
+	-- a single shared scroll value.
+	self._chevronDistances = {}
 	for index = 1, self._chevronCount do
 		local arms = {}
 		for armIndex, offset in ipairs(offsets) do
@@ -119,6 +122,7 @@ function ArrowTrail.new(target, options)
 			table.insert(arms, { part = arm, offset = offset })
 		end
 		table.insert(self._chevrons, arms)
+		self._chevronDistances[index] = (index - 1) * self._spacing
 	end
 
 	self._rayParams = RaycastParams.new()
@@ -306,35 +310,56 @@ function ArrowTrail:_step(deltaTime)
 		self:_resampleGround()
 	end
 
-	-- One scroll cycle is exactly one spacing, so the chevron that runs off
-	-- the target end is replaced by a new one at the player end and the chain
-	-- reads as continuous.
-	self._scroll = (self._scroll + self._scrollSpeed * deltaTime) % self._spacing
-
 	for index, arms in ipairs(self._chevrons) do
-		local distance = self._scroll + (index - 1) * self._spacing
-		if distance > self._usableLength then
-			for _, arm in ipairs(arms) do
-				arm.part.Transparency = 1
-			end
-		else
-			local height = self:_heightAt(distance)
-			local point = self._start + self._direction * distance
-			if height then
-				point = Vector3.new(point.X, height, point.Z)
-			end
+		local distance = self:_advanceChevron(index, deltaTime)
 
-			local frame = CFrame.lookAt(point, point + self._direction)
-			local fadeIn = math.clamp(distance / FADE_STUDS, 0, 1)
-			local fadeOut = math.clamp((self._usableLength - distance) / FADE_STUDS, 0, 1)
-			local transparency = 1 - math.min(fadeIn, fadeOut)
+		local height = self:_heightAt(distance)
+		local point = self._start + self._direction * distance
+		if height then
+			point = Vector3.new(point.X, height, point.Z)
+		end
 
-			for _, arm in ipairs(arms) do
-				arm.part.CFrame = frame * arm.offset
-				arm.part.Transparency = transparency
-			end
+		local frame = CFrame.lookAt(point, point + self._direction)
+		local fadeIn = math.clamp(distance / FADE_STUDS, 0, 1)
+		local fadeOut = math.clamp((self._usableLength - distance) / FADE_STUDS, 0, 1)
+		local transparency = 1 - math.min(fadeIn, fadeOut)
+
+		for _, arm in ipairs(arms) do
+			arm.part.CFrame = frame * arm.offset
+			arm.part.Transparency = transparency
 		end
 	end
+end
+
+-- Advances one chevron's OWN distance along the path and wraps it back to
+-- the player end once it reaches the target end, and returns that distance.
+--
+-- The previous version drove every chevron off ONE shared scroll value
+-- confined to a fixed, non-overlapping SPACING-wide window per chevron
+-- index (distance = scroll + (index-1)*spacing, scroll wrapped mod
+-- spacing). Since every chevron shared the same scroll, ALL of them
+-- wrapped at the exact same instant -- and since only the very first and
+-- last of those windows actually sit inside the fade-in/fade-out zones,
+-- every chevron in the MIDDLE of the path would instantly teleport
+-- backward by a full SPACING, fully opaque, once every SPACING/scrollSpeed
+-- seconds -- a visible jump with nothing to do with terrain or movement,
+-- which is exactly what kept showing up even on flat ground with nothing
+-- else nearby.
+--
+-- Giving each chevron its own persistent distance, wrapped against the
+-- CURRENT (possibly still-changing) usableLength rather than a fixed
+-- window, fixes both problems at once: each one travels the whole path
+-- and only wraps when IT individually reaches the far end, which is
+-- already inside the existing fadeOut zone -- and because the ten
+-- chevrons started at staggered offsets, they don't all reach that point
+-- at the same time.
+function ArrowTrail:_advanceChevron(index, deltaTime)
+	local distance = self._chevronDistances[index] + self._scrollSpeed * deltaTime
+	if self._usableLength > 0 then
+		distance = distance % self._usableLength
+	end
+	self._chevronDistances[index] = distance
+	return distance
 end
 
 function ArrowTrail:Destroy()
