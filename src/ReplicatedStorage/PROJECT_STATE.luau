@@ -119,7 +119,8 @@ game/
 │   │   ├── TutorialGuiLoader (LocalScript) — waits for DataLoaded, hands off
 │   │   ├── TutorialController (ModuleScript) — the state machine
 │   │   ├── WelcomePanel (ModuleScript) — modal opt-in/skip card
-│   │   └── StepPanel (ModuleScript) — non-modal bottom step banner
+│   │   ├── StepPanel (ModuleScript) — non-modal bottom step banner
+│   │   └── CompletionPanel (ModuleScript) — modal "you're all set" card
 │   └── ScreenGui (empty)
 │
 ├── StarterPlayer/
@@ -552,6 +553,16 @@ completed step to the server.
   while the player opens a shop mid-step. There is currently no mid-tutorial
   skip control; the only exits are the welcome panel's Skip or finishing all
   nine steps.
+- **CompletionPanel** -- modal "You're All Set!" card shown once, when
+  `finish()` runs on the `wasSkipped == false` path (every step actually
+  completed, including the degenerate case where every step's target failed
+  to resolve and the controller cascaded straight through -- it doesn't
+  distinguish the two). Never shown on a Skip -- congratulating an opt-out
+  doesn't make sense. Registers with PanelManager like WelcomePanel, but
+  needs no DismissedExternally escape hatch: by the time it's shown the
+  tutorial has already ended and nothing is waiting on its outcome, so
+  PanelManager silently closing it for another panel is harmless rather than
+  a deadlock.
 - **ArrowIndicator / ArrowTrail** (ReplicatedStorage) -- the 3D markers: a
   single blue chevron bobbing over the destination, and a flowing yellow
   chevron path from the player to it. Both are client-only, parts-only (no
@@ -635,7 +646,7 @@ The core tycoon gameplay loop is functional:
 - Music plays in background with GUI controls, and MainHUD's Settings panel now actually controls it
 - 5 NPC shops (MiddleShops) are fully functional: walk up, interact, browse items, buy with in-game Cash, server validates and deducts, Creature Shop purchases grant a real (placeholder) Backpack item
 - CashHUDGroup icon buttons (Settings, Teleport to Tycoon) use real image icons with genuine transparency, and every CashHUDGroup button shows a hover tooltip naming itself
-- First-time players get a nine-step guided tutorial (dropper → cash → upgrade → 4 more droppers to finish the first row → worker centre → hire), with 3D arrow markers pointing at each target. Progress saves per step, so rejoining partway resumes where they left off; respawning mid-step is handled; and returning players never see it again (see section 2.12)
+- First-time players get a nine-step guided tutorial (dropper → cash → upgrade → 4 more droppers to finish the first row → worker centre → hire), with 3D arrow markers pointing at each target and a congratulations card on natural completion. Progress saves per step, so rejoining partway resumes where they left off; respawning mid-step is handled; and returning players never see it again (see section 2.12)
 
 What's NOT yet built:
 - Pets system (placeholder only)

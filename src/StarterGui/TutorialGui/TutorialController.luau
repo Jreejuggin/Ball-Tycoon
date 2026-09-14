@@ -4,7 +4,8 @@
 -- attributes (Phase 1), walks TutorialConfig's step list (Phase 2), drives
 -- WelcomePanel and StepPanel (Phase 3), points ArrowIndicator + ArrowTrail
 -- at each step's target (Phase 4), and reports progress back to the server
--- over the two tutorial RemoteEvents.
+-- over the two tutorial RemoteEvents. Shows CompletionPanel once, when the
+-- last step finishes naturally (Phase 6).
 --
 -- Step resolution: each step's `target` and `completion` are
 -- { root, path } specs -- root says WHERE to start ("Player" or "Plot"),
@@ -34,6 +35,7 @@ local ArrowTrail = require(ReplicatedStorage:WaitForChild("ArrowTrail"))
 
 local WelcomePanel = require(script.Parent:WaitForChild("WelcomePanel"))
 local StepPanel = require(script.Parent:WaitForChild("StepPanel"))
+local CompletionPanel = require(script.Parent:WaitForChild("CompletionPanel"))
 
 local stepEvent = ReplicatedStorage:WaitForChild("TutorialStepEvent")
 local completeEvent = ReplicatedStorage:WaitForChild("TutorialCompleteEvent")
@@ -173,6 +175,13 @@ local function finish(wasSkipped)
 	clearMarkers()
 	StepPanel.Hide()
 	completeEvent:FireServer(wasSkipped)
+
+	-- Only on a NATURAL finish (every step completed). Skipping is opting
+	-- out -- congratulating the player for that would be a non sequitur, so
+	-- the wasSkipped path never sees this panel.
+	if not wasSkipped then
+		CompletionPanel.Show()
+	end
 end
 
 local function startStep(stepIndex)
