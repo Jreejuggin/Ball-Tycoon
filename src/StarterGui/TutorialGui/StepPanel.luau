@@ -42,9 +42,19 @@ local banner = Instance.new("Frame")
 banner.Name = "StepPanel"
 -- Anchored near the bottom rather than mid-screen (where it used to sit,
 -- right in front of whatever the player was trying to look at) -- above
--- the health bar, which occupies roughly the bottom 100px of the HUD.
+-- the health bar.
+--
+-- Positioned with SCALE, not a fixed pixel offset from the bottom. A flat
+-- offset (this used to be `1, -110`, tuned against one dev's screen) is
+-- fragile: this game supports multiple screen sizes and orientations
+-- (StarterPlayer.ScreenOrientation = "Sensor" in default.project.json), and
+-- on an actual play-tested screen that fixed 110px offset put the banner
+-- roughly in the vertical MIDDLE of the screen, squarely in front of the
+-- character, instead of near the bottom like it does on whatever screen it
+-- was tuned on. 0.9 scale means "90% of however tall THIS screen actually
+-- is," which stays proportionally just above the health bar on any device.
 banner.AnchorPoint = Vector2.new(0.5, 1)
-banner.Position = UDim2.new(0.5, 0, 1, -110)
+banner.Position = UDim2.new(0.5, 0, 0.9, 0)
 banner.Size = BANNER_SIZE
 banner.BackgroundColor3 = BACKGROUND_COLOR
 banner.BackgroundTransparency = 0.08
