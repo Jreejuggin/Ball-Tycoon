@@ -8,6 +8,15 @@
 -- MainHUD (Settings/Shop/Pets/...), so opening this closes any of those if
 -- one happened to be open, and vice versa.
 --
+-- That "vice versa" is why there are THREE outcome signals rather than two.
+-- PanelManager.closeAll() sets a registered panel's .Visible to false
+-- directly, so any other panel opening (a MiddleShops ProximityPrompt,
+-- Settings, Shop, Pets) hides this card WITHOUT either button being pressed.
+-- Before DismissedExternally existed that left the controller waiting on a
+-- StartRequested/SkipRequested that could never arrive, and the tutorial was
+-- dead for the rest of the session. Now that case is reported too, and the
+-- controller treats it as "start anyway" rather than deadlocking.
+--
 -- This module only builds the UI and reports intent -- it does not decide
 -- WHEN to show itself (that's the tutorial controller's job: wait for
 -- DataLoaded, check the TutorialEligible attribute, then call Show()) and it
@@ -46,9 +55,17 @@ local WelcomePanel = {}
 -- nothing outside this file can fake a Start/Skip.
 local startRequestedSignal = Instance.new("BindableEvent")
 local skipRequestedSignal = Instance.new("BindableEvent")
+local dismissedExternallySignal = Instance.new("BindableEvent")
 
 WelcomePanel.StartRequested = startRequestedSignal.Event
 WelcomePanel.SkipRequested = skipRequestedSignal.Event
+WelcomePanel.DismissedExternally = dismissedExternallySignal.Event
+
+-- True only between Show() and whichever of the three outcomes happens
+-- first. Gates the .Visible watcher below so the two button paths -- which
+-- hide the card themselves before firing -- don't also report themselves as
+-- an external dismissal.
+local awaitingDecision = false
 
 local function corner(radius, parent)
 	local uiCorner = Instance.new("UICorner")
@@ -159,12 +176,28 @@ ButtonHoverEffect.apply(skipButton)
 PanelManager.registerPanel(card)
 
 function WelcomePanel.Show()
+	-- Set AFTER open(), never before: PanelManager.open() runs closeAll()
+	-- first, which would momentarily drive this card's .Visible to false and
+	-- trip the watcher on what is actually a show.
 	PanelManager.open(card)
+	awaitingDecision = true
 end
 
 function WelcomePanel.Hide()
+	awaitingDecision = false
 	card.Visible = false
 end
+
+-- The only way .Visible goes false while a decision is still outstanding is
+-- somebody else's PanelManager.closeAll() -- Hide() clears the flag first,
+-- so a Start/Skip press never reaches here.
+card:GetPropertyChangedSignal("Visible"):Connect(function()
+	if card.Visible or not awaitingDecision then
+		return
+	end
+	awaitingDecision = false
+	dismissedExternallySignal:Fire()
+end)
 
 -- Activated covers mouse, touch, and gamepad select in one signal, unlike
 -- ButtonHoverEffect's mouse-only hover wiring above -- this project supports

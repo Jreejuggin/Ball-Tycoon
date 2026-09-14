@@ -19,6 +19,10 @@
 -- state -- so a stale resolution from a step the player already skipped
 -- past (or a tutorial that already ended) can't act after the fact.
 --
+-- Welcome-panel outcomes: Start begins step 0, Skip ends the tutorial, and
+-- DismissedExternally (the card being closed out from under us by another
+-- panel opening) is treated as Start -- see the comment in Init.
+--
 -- Usage: TutorialController.Init() -- call once, after DataLoaded.
 
 local Players = game:GetService("Players")
@@ -250,12 +254,37 @@ function TutorialController.Init()
 	local stepIndex = math.max(math.floor(tonumber(player:GetAttribute("TutorialStepIndex")) or 0), 0)
 
 	if stepIndex <= 0 then
-		WelcomePanel.StartRequested:Connect(function()
+		-- The welcome panel has exactly one outcome, but three ways to reach
+		-- it, and only one may ever take effect -- hence the one-shot guard
+		-- rather than three bare Connects.
+		local decided = false
+		local function once(handler)
+			return function()
+				if decided then
+					return
+				end
+				decided = true
+				handler()
+			end
+		end
+
+		WelcomePanel.StartRequested:Connect(once(function()
 			startStep(0)
-		end)
-		WelcomePanel.SkipRequested:Connect(function()
+		end))
+		WelcomePanel.SkipRequested:Connect(once(function()
 			finish(true)
-		end)
+		end))
+		-- Any other PanelManager-registered panel opening (a MiddleShops
+		-- ProximityPrompt, Settings, Shop, Pets) runs closeAll(), which hides
+		-- the welcome card without either button firing. Start the tutorial
+		-- anyway: the player never chose to skip, and waiting for a decision
+		-- that can no longer arrive used to strand them with no panel, no
+		-- markers, and a saved step index of 0 that re-showed this same panel
+		-- on every future join.
+		WelcomePanel.DismissedExternally:Connect(once(function()
+			startStep(0)
+		end))
+
 		WelcomePanel.Show()
 	else
 		startStep(stepIndex)
