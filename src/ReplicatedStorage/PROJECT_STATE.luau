@@ -53,12 +53,15 @@ game/
 │   ├── Other modules: PurchaseEffectModule, PurchaseSoundModule,
 │   │            MachineUpgradeConfig, PlotThemeConfig, PlotTheme,
 │   │            WorkerSpeedConfig, PROJECT_STATE (this file)
+│   ├── First-time tutorial (see section 2.12): TutorialConfig (step list),
+│   │            ArrowIndicator + ArrowTrail (3D world markers)
 │   ├── Dead/unused: WorldShopConfig (empty stub), PurchaseEffectModule_FreshTest6
 │   ├── Design/ (StyleSheet, BaseStyleSheet — UI styling system, not yet applied to MainHUD)
 │   ├── Models: ConveyorCrate, LaserDoorTemplate
 │   ├── RemoteEvents: MachineUpgradeSparkleEvent, PurchaseSoundEvent,
 │   │                 MiddleShopPurchaseEvent, OpenWorldShopEvent (dead, unused),
-│   │                 ThemeRemotes/RequestPlotColor
+│   │                 ThemeRemotes/RequestPlotColor,
+│   │                 TutorialStepEvent, TutorialCompleteEvent (section 2.12)
 │   │   (TeleportToTycoonEvent also lives here at runtime, but is created
 │   │   dynamically by PlotAssignmentScript on server start -- not a static
 │   │   template object. See section 2.8.)
@@ -83,8 +86,11 @@ game/
 │   ├── CentreZoneService
 │   ├── PlotThemeService
 │   ├── WorkerSpeedService
+│   ├── TutorialProgressHandler — network wiring for the two tutorial
+│   │   RemoteEvents (see section 2.12)
 │   └── StructurePurchaseService (ModuleScript)
 │   └── TycoonProgressService (ModuleScript)
+│   └── TutorialProgressService (ModuleScript)
 │
 ├── StarterGui/
 │   ├── StatsHUD (ScreenGui) + StatsHUDUpdater (LocalScript)
@@ -107,6 +113,13 @@ game/
 │   │   │   UpgradeShopPanel — the 5 MiddleShops panels, same visual chrome
 │   │   │   as ShopPanel, rows built via shared ShopRowBuilder
 │   │   ├── RichestBanner, HealthBar
+│   ├── TutorialGui (ScreenGui, ResetOnSpawn=false) — the first-time
+│   │   tutorial's client UI; separate from MainHUD so it survives respawn
+│   │   and so none of it lives in an .rbxm (see section 2.12)
+│   │   ├── TutorialGuiLoader (LocalScript) — waits for DataLoaded, hands off
+│   │   ├── TutorialController (ModuleScript) — the state machine
+│   │   ├── WelcomePanel (ModuleScript) — modal opt-in/skip card
+│   │   └── StepPanel (ModuleScript) — non-modal bottom step banner
 │   └── ScreenGui (empty)
 │
 ├── StarterPlayer/
@@ -450,6 +463,109 @@ in each config, no other code changes needed.
   server-side on purchase. This system works end-to-end today. Prices are
   placeholder values and will be retuned once the economy is balanced.
 
+### 2.12 First-Time Tutorial
+
+A five-step guided onboarding run once per player, the first time they ever
+join. Config-driven the same way the shops are: the step list is a single
+ReplicatedStorage ModuleScript, and both the client state machine and the
+server's persistence drive themselves off it.
+
+**Config (ReplicatedStorage.TutorialConfig):**
+Ordered list of steps. Each step is `{ id, title, dialog, target, completion }`.
+`target` (what the 3D markers point at) and `completion` (what decides the
+step is done) are both `{ root, path }` specs resolved at runtime rather than
+hardcoded Instance references -- `root` is `"Plot"` (the player's assigned
+plot in Workspace) or `"Player"` (the Player instance, e.g. leaderstats), and
+`path` is a "/"-separated child chain walked from there, the same relative-path
+convention TycoonProgressService and DataSaveScript already use. Two completion
+shapes cover every step: `ValueTrue` (a BoolValue turning true) and
+`ValueIncreased` (an Int/NumberValue rising above its value at step start --
+deliberately not "changed", since spending Cash lowers it and that must never
+read as progress).
+
+The five steps: BuyFirstDropper, CollectCash, UpgradeFirstDropper,
+UnlockWorkerCentre, HireFirstWorker. Adding or reordering steps is a table
+edit -- no code changes.
+
+> **Unlocking the worker centre is not the same as hiring a worker.** The
+> centre's BuyPad unlocks the *zone* and sets
+> `CentreSlots/Centre01_Worker/Activated` (CentreZoneService). Hiring happens
+> separately at `Plot/HiringKiosk` and sets
+> `CentreSlots/Centre01_Worker/WorkerActivations/Worker1` (the Studio-native
+> WorkerSpawnerController, see section 2.3). They are two real purchases and
+> therefore two real steps; conflating them made the step complete the moment
+> the zone unlocked, before any worker existed.
+
+**Persistence (ServerScriptService.TutorialProgressService + DataSaveScript):**
+TutorialProgressService owns the state; DataSaveScript calls `.Resolve()` on
+join with the raw DataStore result and `.Serialize()` at save time, writing an
+additive `Tutorial` field into the existing save payload. The job that matters
+is telling three DataStore outcomes apart, because GetAsync collapses two of
+them into "no saved table":
+
+| Load result | Meaning | Tutorial |
+| --- | --- | --- |
+| success, no data | genuine first visit | run it |
+| success, data | returning player | resume at saved step, or skip if done |
+| failure | transient load error | **never** run it |
+
+Treating a failed load as "new player" would replay the tutorial for existing
+players, so the failure case resolves first and always resolves to "already
+completed". A save written before the `Tutorial` field existed is grandfathered
+in as finished for the same reason. Resolved state is mirrored onto the Player
+as attributes (`TutorialEligible`, `TutorialCompleted`, `TutorialStepIndex`,
+`TutorialSkipped`) so the client reads it straight off replication with no
+remote round-trip on join. `.SetStepIndex()` is forward-only and refuses to
+touch an ineligible player, so the client driving step advancement can't push
+saved progress backward or reopen a finished tutorial.
+
+**Client (StarterGui.TutorialGui):**
+Its own ScreenGui with `ResetOnSpawn = false`, deliberately not part of
+MainHUD -- that keeps it alive across respawns and keeps every piece of it as
+a loose `.luau` file rather than inside an .rbxm. TutorialGuiLoader waits for
+the player's `DataLoaded` attribute, then hands off to TutorialController,
+which walks the config, points the markers, drives StepPanel, and reports each
+completed step to the server.
+
+- **WelcomePanel** -- modal opt-in card, registered with PanelManager like
+  every MainHUD panel. Reports three outcomes, not two: Start, Skip, and
+  DismissedExternally. The third exists because PanelManager.closeAll() sets a
+  registered panel's `.Visible` false *directly*, so any other panel opening (a
+  MiddleShops prompt, Settings, Shop, Pets) hid the card with neither button
+  pressed and left the controller waiting forever on a decision that could
+  never arrive. That is treated as Start, not Skip -- the player never chose to
+  opt out.
+- **StepPanel** -- non-modal bottom banner showing the current step's title and
+  dialog. Deliberately does *not* register with PanelManager, so it stays up
+  while the player opens a shop mid-step. There is currently no mid-tutorial
+  skip control; the only exits are the welcome panel's Skip or finishing all
+  five steps.
+- **ArrowIndicator / ArrowTrail** (ReplicatedStorage) -- the 3D markers: a
+  single blue chevron bobbing over the destination, and a flowing yellow
+  chevron path from the player to it. Both are client-only, parts-only (no
+  WedgePart/SpecialMesh -- built from `CFrame.lookAt` math), and every part is
+  `CanCollide/CanTouch/CanQuery = false`, so they can't block a MiddleShops
+  ProximityPrompt's line-of-sight raycast or intercept clicks. ArrowTrail reads
+  the plot's own floor height (`plot.PrimaryPart` or a `Floor` child, matching
+  PlotAssignmentScript) rather than raycasting -- raycasts hit invisible
+  collision volumes too, which had the trail climbing onto droppers and pads.
+
+**Respawn and rejoin.** Both work without any explicit pause/resume machinery.
+ArrowTrail re-resolves the player's HumanoidRootPart every frame rather than
+caching it, so it blanks itself while there is no character and picks up the
+replacement on its own; ArrowIndicator never touches the character; and
+`ResetOnSpawn = false` keeps the controller and its connections alive. Rejoin
+resumes from the saved step index and skips the welcome panel, because progress
+is persisted per step rather than only at the end.
+
+**Dev hooks.** Set the Workspace attribute `StudioResetTutorial` to true in Edit
+mode to make every joining player eligible again (Studio only, ignored in
+published servers -- mirrors PlotAssignmentScript's StudioForcedPlotName). To
+reset one player mid-session, run
+`require(game.ServerScriptService.TutorialProgressService).Reset(player)` from
+the command bar. Note that player attributes only appear in the Properties
+window while Play-testing, under the collapsed "Attributes" section.
+
 ---
 
 ## 3. Key Architectural Decisions
@@ -466,7 +582,10 @@ in each config, no other code changes needed.
 10. **Player-owned plot themes:** Cosmetic accent membership is persistent CollectionService metadata; clients request a color, while the server resolves ownership, applies it, and saves it per player.
 11. **Shared, pluggable shop UI:** ShopRowBuilder builds every shop-style panel's rows (main Shop, all 5 MiddleShops) from the same code, with the purchase flow (Robux vs in-game Cash) swapped via an optional callback rather than duplicated per shop. PanelManager gives every panel the same single-panel-exclusive open/close behavior without each script needing its own copy of that logic.
 12. **Config-driven shop content:** Every shop's items live in a small ReplicatedStorage ModuleScript (id/name/cost-or-productId/icon). Adding an item is a table edit; adding a whole new NPC shop is one config module + one panel + one entry in MiddleShopsController's SHOP_DEFINITIONS.
-13. **Shared UI utility modules over per-button duplication:** ButtonHoverEffect and Tooltip both follow the same pattern -- one shared module, `Module.apply(button, ...)` / `Module.attach(button, ...)`, rather than copy-pasting tween/event-wiring code per button.
+13. **Config-driven onboarding:** The first-time tutorial's step list is one ReplicatedStorage ModuleScript (TutorialConfig), and each step describes its target and its completion condition as a `{root, path}` spec resolved at runtime rather than as a hardcoded Instance reference. Both the client state machine and the server's persistence drive themselves off that one list, so adding, reordering, or removing a step is a table edit. Same shape as the shop configs (decision 12).
+14. **Tutorial state resolved from a tri-state DataStore result:** GetAsync collapses "brand-new player" and "load failed" into the same empty result, so TutorialProgressService takes the success flag separately and resolves failure FIRST, always to "already completed". A failed load must never look like a new player, or returning players replay onboarding over their real save. See section 2.12.
+15. **Tutorial UI lives outside MainHUD:** TutorialGui is its own ScreenGui with `ResetOnSpawn = false`, rather than more frames inside MainHUD.rbxm. That keeps the controller and its connections alive across respawns, and keeps every part of the feature as loose `.luau` files that sync cleanly through Rojo instead of being buried in a binary model file.
+16. **Shared UI utility modules over per-button duplication:** ButtonHoverEffect and Tooltip both follow the same pattern -- one shared module, `Module.apply(button, ...)` / `Module.attach(button, ...)`, rather than copy-pasting tween/event-wiring code per button.
 
 ---
 
@@ -478,6 +597,8 @@ in each config, no other code changes needed.
 - **Creature Shop items:** All 4 tiers currently grant the same placeholder visual (CreatureBall_Slimey mesh) — needs real per-tier models
 - **Ball/TradingPost/Vault/UpgradeShop items:** Only get the generic PurchasedItems counter, no physical item yet (unlike Creature Shop)
 - **PetsPanel:** Placeholder only — shows "Soon" pills, not functional
+- **Tutorial has no mid-run skip:** The only exits are the welcome panel's Skip button or completing all five steps. Because an externally-dismissed welcome card now auto-starts the tutorial (section 2.12), a player who opened a shop instead of choosing can end up in a tutorial they didn't pick, with no way out. Low impact -- StepPanel is a non-modal banner and the five steps are normal progression -- but a small close control on StepPanel would remove it entirely.
+- **Tutorial step targets assume the standard plot layout:** Steps resolve paths like `DropperSlots/Slot1/BuyPad` and `HiringKiosk` against the player's plot. P1–P10 are structurally identical today (see CONTRIBUTING's plot-symmetry rule), so this holds -- but a step whose path can't be resolved is warned about and skipped, not retried, so a layout change silently shortens the tutorial rather than erroring.
 - **UISoundConfig hover/click sounds:** IDs are empty placeholders — confirmed Roblox's built-in rbxasset:// sounds don't resolve here, so a real uploaded sound is needed
 - **Tooltip system:** Wired up and structurally verified (no errors), but never visually confirmed live -- worth a manual check that positioning/timing feels right
 - **Music system playlist switching:** README v1.2.0 changelog notes "CURRENTLY SWITCHING PLAYLISTS NEEDS TO BE WORKED OUT IN THE NEXT UPDATE"
@@ -502,6 +623,7 @@ The core tycoon gameplay loop is functional:
 - Music plays in background with GUI controls, and MainHUD's Settings panel now actually controls it
 - 5 NPC shops (MiddleShops) are fully functional: walk up, interact, browse items, buy with in-game Cash, server validates and deducts, Creature Shop purchases grant a real (placeholder) Backpack item
 - CashHUDGroup icon buttons (Settings, Teleport to Tycoon) use real image icons with genuine transparency, and every CashHUDGroup button shows a hover tooltip naming itself
+- First-time players get a five-step guided tutorial (dropper → cash → upgrade → worker centre → hire), with 3D arrow markers pointing at each target. Progress saves per step, so rejoining partway resumes where they left off; respawning mid-step is handled; and returning players never see it again (see section 2.12)
 
 What's NOT yet built:
 - Pets system (placeholder only)
@@ -510,6 +632,7 @@ What's NOT yet built:
 - MiddleShops purchase persistence across sessions
 - Real hover/click UI sounds (architecture is there, sound IDs are empty)
 - No game loop/win condition beyond tycoon progression
+- No mid-tutorial skip control -- once started, the only exit is finishing all five steps (see section 2.12)
 - No admin tools or moderation systems
 
 ---
@@ -545,6 +668,9 @@ What's NOT yet built:
 - **Testing Cash-balance-dependent logic:** this economy's passive income is fast (tens of thousands/sec on active accounts). Don't set Cash low from a client script and wait before checking -- that write doesn't even replicate to the server's authoritative value. Use eval_server_runtime with a zero-yield check for real insufficient-funds testing.
 - **Adding hover tooltips to a new button:** `require(ReplicatedStorage.Tooltip).attach(button, "Label Text")` -- that's it, no per-button UI to build.
 - **Fixing a transparent-PNG-that-isn't-actually-transparent icon:** check alpha channel mode first (PIL: `img.mode`). If it's RGB with no alpha, don't assume a simple color threshold will work -- check whether the icon's own fill color is close to the background color first (sample a few pixels). If they're close, use the texture-variance-per-connected-region method described in section 2.8's Icon Assets note, not a plain threshold.
+- **Adding or reordering a tutorial step:** edit the TutorialConfig table, nothing else. Each entry needs `id`, `title`, `dialog`, a `target` `{root, path}` (something with a world position -- Model or BasePart) and a `completion` `{type, root, path}` (`ValueTrue` for a BoolValue, `ValueIncreased` for an Int/NumberValue). A step whose path doesn't resolve is warned about and skipped rather than hanging the sequence -- so if a step silently never appears, check the path against the real plot hierarchy first.
+- **Testing the tutorial without a fresh account:** set the Workspace attribute `StudioResetTutorial` to true in Edit mode (Studio-only, ignored when published) to make every joining player eligible again, or reset one player mid-session from the command bar with `require(game.ServerScriptService.TutorialProgressService).Reset(player)`. The tutorial's Player attributes (`TutorialEligible`, `TutorialStepIndex`, ...) only show up in the Properties window while Play-testing, under the collapsed "Attributes" section.
+- **Don't conflate unlocking the worker centre with hiring a worker.** `CentreSlots/Centre01_Worker/Activated` is the zone unlock (CentreZoneService); `CentreSlots/Centre01_Worker/WorkerActivations/Worker1` is an actual hired worker (WorkerSpawnerController at `Plot/HiringKiosk`). They're separate purchases. WorkerSpawnerController and the P1–P10 plots are Studio-native and not in the Rojo source tree, so section 2.3 is the best available description of them.
 - **Roblox asset upload/search tools are broken in this environment** (missing API key) — go straight to the manual Asset-Manager-import + asset-ID handoff workflow, don't waste a turn retrying `upload_asset` first.
 
 ---
