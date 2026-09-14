@@ -465,7 +465,7 @@ in each config, no other code changes needed.
 
 ### 2.12 First-Time Tutorial
 
-A five-step guided onboarding run once per player, the first time they ever
+A nine-step guided onboarding run once per player, the first time they ever
 join. Config-driven the same way the shops are: the step list is a single
 ReplicatedStorage ModuleScript, and both the client state machine and the
 server's persistence drive themselves off it.
@@ -483,9 +483,21 @@ shapes cover every step: `ValueTrue` (a BoolValue turning true) and
 deliberately not "changed", since spending Cash lowers it and that must never
 read as progress).
 
-The five steps: BuyFirstDropper, CollectCash, UpgradeFirstDropper,
+The nine steps: BuyFirstDropper, CollectCash, UpgradeFirstDropper,
+BuySecondDropper, BuyThirdDropper, BuyFourthDropper, BuyFifthDropper,
 UnlockWorkerCentre, HireFirstWorker. Adding or reordering steps is a table
 edit -- no code changes.
+
+> **The worker centre requires the WHOLE first row of droppers, not just
+> one.** CentreZoneService.luau gates Centre01_Worker's BuyPad behind
+> `firstDroppersComplete()`, which requires Slot1 through Slot5's `Activated`
+> to ALL be true (`FIRST_DROPPER_COUNT = 5`) before the pad's `CanTouch` even
+> turns on -- until then it's a greyed-out "LOCKED" pad. An earlier version of
+> this tutorial jumped from Slot1 straight to "unlock the worker centre" and
+> pointed the arrow at a pad the player couldn't actually buy yet, because
+> Slots 2-5 were still untouched. BuySecondDropper through BuyFifthDropper
+> close that gap. If FIRST_DROPPER_COUNT or the row's slot count ever
+> changes, this step list needs to change with it.
 
 > **Unlocking the worker centre is not the same as hiring a worker.** The
 > centre's BuyPad unlocks the *zone* and sets
@@ -539,7 +551,7 @@ completed step to the server.
   dialog. Deliberately does *not* register with PanelManager, so it stays up
   while the player opens a shop mid-step. There is currently no mid-tutorial
   skip control; the only exits are the welcome panel's Skip or finishing all
-  five steps.
+  nine steps.
 - **ArrowIndicator / ArrowTrail** (ReplicatedStorage) -- the 3D markers: a
   single blue chevron bobbing over the destination, and a flowing yellow
   chevron path from the player to it. Both are client-only, parts-only (no
@@ -597,7 +609,7 @@ window while Play-testing, under the collapsed "Attributes" section.
 - **Creature Shop items:** All 4 tiers currently grant the same placeholder visual (CreatureBall_Slimey mesh) — needs real per-tier models
 - **Ball/TradingPost/Vault/UpgradeShop items:** Only get the generic PurchasedItems counter, no physical item yet (unlike Creature Shop)
 - **PetsPanel:** Placeholder only — shows "Soon" pills, not functional
-- **Tutorial has no mid-run skip:** The only exits are the welcome panel's Skip button or completing all five steps. Because an externally-dismissed welcome card now auto-starts the tutorial (section 2.12), a player who opened a shop instead of choosing can end up in a tutorial they didn't pick, with no way out. Low impact -- StepPanel is a non-modal banner and the five steps are normal progression -- but a small close control on StepPanel would remove it entirely.
+- **Tutorial has no mid-run skip:** The only exits are the welcome panel's Skip button or completing all nine steps. Because an externally-dismissed welcome card now auto-starts the tutorial (section 2.12), a player who opened a shop instead of choosing can end up in a tutorial they didn't pick, with no way out. Low impact -- StepPanel is a non-modal banner and the nine steps are normal progression -- but a small close control on StepPanel would remove it entirely.
 - **Tutorial step targets assume the standard plot layout:** Steps resolve paths like `DropperSlots/Slot1/BuyPad` and `HiringKiosk` against the player's plot. P1–P10 are structurally identical today (see CONTRIBUTING's plot-symmetry rule), so this holds -- but a step whose path can't be resolved is warned about and skipped, not retried, so a layout change silently shortens the tutorial rather than erroring.
 - **UISoundConfig hover/click sounds:** IDs are empty placeholders — confirmed Roblox's built-in rbxasset:// sounds don't resolve here, so a real uploaded sound is needed
 - **Tooltip system:** Wired up and structurally verified (no errors), but never visually confirmed live -- worth a manual check that positioning/timing feels right
@@ -623,7 +635,7 @@ The core tycoon gameplay loop is functional:
 - Music plays in background with GUI controls, and MainHUD's Settings panel now actually controls it
 - 5 NPC shops (MiddleShops) are fully functional: walk up, interact, browse items, buy with in-game Cash, server validates and deducts, Creature Shop purchases grant a real (placeholder) Backpack item
 - CashHUDGroup icon buttons (Settings, Teleport to Tycoon) use real image icons with genuine transparency, and every CashHUDGroup button shows a hover tooltip naming itself
-- First-time players get a five-step guided tutorial (dropper → cash → upgrade → worker centre → hire), with 3D arrow markers pointing at each target. Progress saves per step, so rejoining partway resumes where they left off; respawning mid-step is handled; and returning players never see it again (see section 2.12)
+- First-time players get a nine-step guided tutorial (dropper → cash → upgrade → 4 more droppers to finish the first row → worker centre → hire), with 3D arrow markers pointing at each target. Progress saves per step, so rejoining partway resumes where they left off; respawning mid-step is handled; and returning players never see it again (see section 2.12)
 
 What's NOT yet built:
 - Pets system (placeholder only)
@@ -632,7 +644,7 @@ What's NOT yet built:
 - MiddleShops purchase persistence across sessions
 - Real hover/click UI sounds (architecture is there, sound IDs are empty)
 - No game loop/win condition beyond tycoon progression
-- No mid-tutorial skip control -- once started, the only exit is finishing all five steps (see section 2.12)
+- No mid-tutorial skip control -- once started, the only exit is finishing all nine steps (see section 2.12)
 - No admin tools or moderation systems
 
 ---

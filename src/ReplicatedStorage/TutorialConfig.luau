@@ -44,9 +44,46 @@ local TutorialConfig = {
 		completion = { type = "ValueIncreased", root = "Plot", path = "DropperSlots/Slot1/UpgradeLevel" },
 	},
 	{
+		-- CentreZoneService.luau (server) gates the worker centre behind the
+		-- WHOLE first row of droppers, not just Slot1: requirementMet() ->
+		-- firstDroppersComplete() requires Slot1 through Slot5's Activated all
+		-- true before Centre01_Worker/BuyPad's CanTouch even turns on -- until
+		-- then it's a "LOCKED" pad, greyed out and untouchable. Pointing the
+		-- tutorial at it right after Slot1 (as this list used to) sent the
+		-- player to a pad they couldn't actually buy yet. These three steps
+		-- close that gap by walking the player through the rest of the row
+		-- first, matching FIRST_DROPPER_COUNT = 5 in that service.
+		id = "BuySecondDropper",
+		title = "Buy Your Second Dropper",
+		dialog = "Keep going! Buy the next dropper in the row.",
+		target = { root = "Plot", path = "DropperSlots/Slot2/BuyPad" },
+		completion = { type = "ValueTrue", root = "Plot", path = "DropperSlots/Slot2/Activated" },
+	},
+	{
+		id = "BuyThirdDropper",
+		title = "Buy Your Third Dropper",
+		dialog = "Great progress! Buy the next dropper in the row.",
+		target = { root = "Plot", path = "DropperSlots/Slot3/BuyPad" },
+		completion = { type = "ValueTrue", root = "Plot", path = "DropperSlots/Slot3/Activated" },
+	},
+	{
+		id = "BuyFourthDropper",
+		title = "Buy Your Fourth Dropper",
+		dialog = "Almost done with this row! Buy the next dropper.",
+		target = { root = "Plot", path = "DropperSlots/Slot4/BuyPad" },
+		completion = { type = "ValueTrue", root = "Plot", path = "DropperSlots/Slot4/Activated" },
+	},
+	{
+		id = "BuyFifthDropper",
+		title = "Buy Your Fifth Dropper",
+		dialog = "One more! Buy the last dropper to complete the row.",
+		target = { root = "Plot", path = "DropperSlots/Slot5/BuyPad" },
+		completion = { type = "ValueTrue", root = "Plot", path = "DropperSlots/Slot5/Activated" },
+	},
+	{
 		id = "UnlockWorkerCentre",
 		title = "Unlock the Worker Centre",
-		dialog = "Workers collect cash for you automatically. Head to the worker centre and unlock it!",
+		dialog = "The whole row is bought! Workers collect cash for you automatically -- head to the worker centre and unlock it!",
 		target = { root = "Plot", path = "CentreSlots/Centre01_Worker/BuyPad" },
 		completion = { type = "ValueTrue", root = "Plot", path = "CentreSlots/Centre01_Worker/Activated" },
 	},
