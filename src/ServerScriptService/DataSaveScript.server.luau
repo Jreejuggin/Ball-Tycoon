@@ -2,6 +2,7 @@ local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
 
 local TycoonProgressService = require(script.Parent.TycoonProgressService)
+local TutorialProgressService = require(script.Parent.TutorialProgressService)
 
 -- Changing this version intentionally starts every player with a clean save.
 -- The old v1 store remains isolated and is no longer loaded or written.
@@ -102,6 +103,11 @@ Players.PlayerAdded:Connect(function(player)
 	TycoonProgressService.SetLoadedProgress(player, savedProgress)
 	restorePurchasedItems(player, success and type(savedData) == "table" and savedData.PurchasedItems or nil)
 
+	-- Deliberately passes the raw pcall result rather than a "savedData == nil"
+	-- test: only the service can tell a brand-new player apart from a failed
+	-- load, and getting that wrong replays the tutorial for existing players.
+	TutorialProgressService.Resolve(player, success, savedData)
+
 	player:SetAttribute("DataLoaded", true)
 end)
 
@@ -139,6 +145,7 @@ local function getPlayerData(player)
 		TycoonProgress = TycoonProgressService.GetDepartureProgress(player)
 			or TycoonProgressService.CapturePlot(plot),
 		PurchasedItems = purchasedItems,
+		Tutorial = TutorialProgressService.Serialize(player),
 	}
 end
 
