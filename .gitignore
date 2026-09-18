@@ -2,3 +2,6 @@
 backups/
 
 .DS_Store
+
+# Regenerated continuously by `rojo sourcemap --watch`; not source.
+sourcemap.json
