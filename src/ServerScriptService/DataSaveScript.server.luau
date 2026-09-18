@@ -3,6 +3,7 @@ local Players = game:GetService("Players")
 
 local TycoonProgressService = require(script.Parent.TycoonProgressService)
 local TutorialProgressService = require(script.Parent.TutorialProgressService)
+local WorkerGiftCooldownService = require(script.Parent.WorkerGiftCooldownService)
 
 -- Changing this version intentionally starts every player with a clean save.
 -- The old v1 store remains isolated and is no longer loaded or written.
@@ -108,6 +109,10 @@ Players.PlayerAdded:Connect(function(player)
 	-- load, and getting that wrong replays the tutorial for existing players.
 	TutorialProgressService.Resolve(player, success, savedData)
 
+	-- Same reasoning as above: a failed load must never look like "never
+	-- claimed" (which would let a rejoin bypass an active cooldown).
+	WorkerGiftCooldownService.Resolve(player, success, savedData)
+
 	player:SetAttribute("DataLoaded", true)
 end)
 
@@ -146,6 +151,7 @@ local function getPlayerData(player)
 			or TycoonProgressService.CapturePlot(plot),
 		PurchasedItems = purchasedItems,
 		Tutorial = TutorialProgressService.Serialize(player),
+		LastWorkerGiftClaim = WorkerGiftCooldownService.Serialize(player),
 	}
 end
 

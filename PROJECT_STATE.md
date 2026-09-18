@@ -1,4 +1,3 @@
---[[
 # PROJECT_STATE.md
 
 ## Game Overview
@@ -27,7 +26,7 @@ game/
 │   │   ├── HiringKiosk (tagged ThemedModel; 13 themed parts + 4 collision boxes)
 │   │   ├── LaserDoor (Model) + LaserDoorToggleScript
 │   │   ├── CeilingLights (Model) + CeilingLightsController
-│   │   ├── CentreSlots/ — five sequential centres; Centre01_Worker contains worker upgrades; Centre02_Home contains StructureSlots
+│   │   ├── CentreSlots/ — five sequential centres; Centre01_Worker contains worker upgrades (including the WorkerNotesGiftsStation, see section 2.13); Centre02_Home contains StructureSlots
 │   │   ├── ConveyorBeltBig/ (Folder) — Conveyor4-6
 │   │   ├── ConveyorBeltSuper/ (Folder) — Conveyor7
 │   │   ├── ConveyorSlots/ (Folder) — Conveyor1-3
@@ -52,7 +51,7 @@ game/
 │   │            BallShopConfig, TradingPostConfig, VaultConfig, UpgradeShopConfig
 │   ├── Other modules: PurchaseEffectModule, PurchaseSoundModule,
 │   │            MachineUpgradeConfig, PlotThemeConfig, PlotTheme,
-│   │            WorkerSpeedConfig, PROJECT_STATE (this file)
+│   │            WorkerSpeedConfig
 │   ├── First-time tutorial (see section 2.12): TutorialConfig (step list),
 │   │            ArrowIndicator + ArrowTrail (3D world markers)
 │   ├── Dead/unused: WorldShopConfig (empty stub), PurchaseEffectModule_FreshTest6
@@ -61,7 +60,8 @@ game/
 │   ├── RemoteEvents: MachineUpgradeSparkleEvent, PurchaseSoundEvent,
 │   │                 MiddleShopPurchaseEvent, OpenWorldShopEvent (dead, unused),
 │   │                 ThemeRemotes/RequestPlotColor,
-│   │                 TutorialStepEvent, TutorialCompleteEvent (section 2.12)
+│   │                 TutorialStepEvent, TutorialCompleteEvent (section 2.12),
+│   │                 WorkerGiftsInteractionEvent (section 2.13)
 │   │   (TeleportToTycoonEvent also lives here at runtime, but is created
 │   │   dynamically by PlotAssignmentScript on server start -- not a static
 │   │   template object. See section 2.8.)
@@ -72,6 +72,8 @@ game/
 │   │   every Creature Shop purchase; wraps a cloned CreatureBall_Slimey
 │   │   MeshPart as its Handle. Same visual for all 4 creature tiers for now.
 │   ├── SavedLightDesigns/CeilingLights_Orbs (Model + controller)
+│   ├── Modules/WorkerNotesGiftsStationTheme — color/material contract for the
+│   │   Worker Notes & Gifts station's 42 meshes (see section 2.13)
 │   └── WorkerTemplates/ (Worker1, ConveyorWorker, BigConveyorWorker — all with WorkerScript)
 │
 ├── ServerScriptService/
@@ -88,9 +90,13 @@ game/
 │   ├── WorkerSpeedService
 │   ├── TutorialProgressHandler — network wiring for the two tutorial
 │   │   RemoteEvents (see section 2.12)
+│   ├── WorkerNotesGiftsStationService — Daily Worker Gifts station wiring,
+│   │   claim flow, and cooldown status display (see section 2.13)
 │   └── StructurePurchaseService (ModuleScript)
 │   └── TycoonProgressService (ModuleScript)
 │   └── TutorialProgressService (ModuleScript)
+│   └── WorkerGiftCooldownService (ModuleScript) — owns the 24h Daily Worker
+│       Gifts claim cooldown (see section 2.13)
 │
 ├── StarterGui/
 │   ├── StatsHUD (ScreenGui) + StatsHUDUpdater (LocalScript)
@@ -130,7 +136,9 @@ game/
 │       ├── StructureGhostPreviewScript (LocalScript)
 │       ├── PurchaseSoundClient (LocalScript)
 │       ├── MachineIncomeCashRainClient (LocalScript)
-│       └── MachineUpgradeSparkleClient (LocalScript)
+│       ├── MachineUpgradeSparkleClient (LocalScript)
+│       └── WorkerGiftsPopupClient (LocalScript) — Daily Worker Gifts
+│           claim/cooldown toast popup (see section 2.13)
 │
 └── StarterPack/ (empty)
 ```
@@ -154,7 +162,7 @@ game/
 
 **DataSaveScript** (ServerScriptService)
 - DataStore key: PlayerCashData_v2
-- Saves cash, centre level, plot progression, worker hires, machine upgrades, structures, purchased items, and the player's selected plot color
+- Saves cash, centre level, plot progression, worker hires, machine upgrades, structures, purchased items, the player's selected plot color, tutorial progress, and the Daily Worker Gifts cooldown timestamp (see section 2.13)
 - Loads on join, saves on leave and on server close (BindToClose)
 - Sets player:SetAttribute("DataLoaded", true) to signal completion
 - Does NOT yet save MiddleShops Backpack items (the CreatureShopPlaceholderItem
@@ -589,6 +597,68 @@ reset one player mid-session, run
 the command bar. Note that player attributes only appear in the Properties
 window while Play-testing, under the collapsed "Attributes" section.
 
+### 2.13 Daily Worker Gifts
+
+A once-per-24-hours Cash claim at the existing Worker Notes & Gifts station
+(`Plot/CentreSlots/Centre01_Worker/WorkerNotesGiftsStation`), unlocked after
+the station's own one-time $5 purchase (`PurchaseState/Activated`). Interact
+via the station's `WorkerGiftsPrompt` ProximityPrompt (E / gamepad X).
+
+**Server (ServerScriptService.WorkerGiftCooldownService, ModuleScript):**
+Owns the cooldown only -- not the reward, not the interaction. Mirrors
+TutorialProgressService's tri-state DataStore resolution (see decision 14 in
+section 3): a failed load must never look like "no cooldown active," so
+`IsAvailable` and `GetRemainingSeconds` both refuse outright while
+`DataLoadFailed` is set, regardless of the timestamp. Public API:
+`Resolve(player, loadSucceeded, savedData)` (called on join, mirrors
+`TutorialProgressService.Resolve`), `Serialize(player)` (feeds
+`DataSaveScript`'s save payload), `IsAvailable`, `GetRemainingSeconds`,
+`MarkClaimed`, and a dev-only `Reset(player)` callable from the Studio command
+bar. `COOLDOWN_SECONDS` (24h) is exported so nothing else hardcodes it. The
+timestamp persists as `LastWorkerGiftClaim` in the same save payload
+DataSaveScript already writes (`getPlayerData`), and is mirrored onto the
+Player as an attribute of the same name.
+
+**Claim flow (ServerScriptService.WorkerNotesGiftsStationService):** the
+station's `ProximityPrompt.Triggered` already only fires server-side with a
+trusted `player` argument, so no RemoteEvent round-trip was needed for the
+request leg -- ownership and purchase state are re-validated the same way the
+station's existing buy-pad already does. A short `os.clock()` debounce (1s,
+pre-existing) blocks rapid double-fires; the real gate is
+`WorkerGiftCooldownService.IsAvailable`. On success: grants a **placeholder**
+`PLACEHOLDER_GIFT_REWARD_CASH = 150` (flagged in-code; swapping in the real
+reward is a one-line change), calls `MarkClaimed`, no yield between the two.
+The result fires back over the pre-existing `WorkerGiftsInteractionEvent`
+RemoteEvent (previously used only for cosmetic flavor text) with an `outcome`
+of `"Claimed"` or `"OnCooldown"`.
+
+**Countdown UI:** two pieces, both driven off the server-persisted timestamp
+rather than a free-running client clock:
+- World-space: the station's existing persistent `GiftStatusLabel`
+  BillboardGui (previously a static "🎁 1 gift/day") now shows "🎁 Ready to
+  claim!" or "🎁 Ready in Xh Ym" for the plot **owner's** cooldown, refreshed
+  by the same 0.5s loop that already drives the buy-pad's affordability color.
+- Toast: `WorkerGiftsPopupClient` (StarterPlayerScripts) live-ticks the
+  remaining time at second precision for its own ~3.25s visible window via
+  `RunService.Heartbeat`, anchored to elapsed client time since that specific
+  toast appeared -- cosmetic only; the 24h gate is enforced server-side on the
+  next interact regardless of what the toast displays.
+
+> **Opening animation (originally planned as a follow-up milestone) is
+> undecided.** The station discovery, cooldown foundation, claim +
+> placeholder reward, and countdown UI are complete and the claim flow works
+> correctly today with an instant reward grant and no animation. Whether to
+> add a lid rotation/scale tween (or similar) on claim is still being
+> weighed -- it's a presentation layer on top of an already-functional
+> feature, not a blocker for anything else built on top of it. Revisit this
+> section once that's decided.
+
+**Dev hooks.** `require(game.ServerScriptService.WorkerGiftCooldownService)`
+from the Studio command bar: `.Reset(player)` re-tests the claim repeatedly
+without waiting 24h or touching any other saved field (unlike wiping the
+whole DataStore entry, which resets Cash/plot color/tutorial progress too).
+`.IsAvailable(player)` / `.GetRemainingSeconds(player)` for direct inspection.
+
 ---
 
 ## 3. Key Architectural Decisions
@@ -609,6 +679,7 @@ window while Play-testing, under the collapsed "Attributes" section.
 14. **Tutorial state resolved from a tri-state DataStore result:** GetAsync collapses "brand-new player" and "load failed" into the same empty result, so TutorialProgressService takes the success flag separately and resolves failure FIRST, always to "already completed". A failed load must never look like a new player, or returning players replay onboarding over their real save. See section 2.12.
 15. **Tutorial UI lives outside MainHUD:** TutorialGui is its own ScreenGui with `ResetOnSpawn = false`, rather than more frames inside MainHUD.rbxm. That keeps the controller and its connections alive across respawns, and keeps every part of the feature as loose `.luau` files that sync cleanly through Rojo instead of being buried in a binary model file.
 16. **Shared UI utility modules over per-button duplication:** ButtonHoverEffect and Tooltip both follow the same pattern -- one shared module, `Module.apply(button, ...)` / `Module.attach(button, ...)`, rather than copy-pasting tween/event-wiring code per button.
+17. **Daily Worker Gifts cooldown reuses the tutorial's tri-state DataStore pattern:** WorkerGiftCooldownService resolves failure first (never available) exactly like TutorialProgressService (decision 14), so a transient DataStore failure can never be read as "no cooldown active." Countdown UI (world billboard + claim toast) is driven off the persisted server timestamp, not a free-running client clock, so it can't drift or be reset by rejoining. See section 2.13.
 
 ---
 
@@ -632,6 +703,8 @@ window while Play-testing, under the collapsed "Attributes" section.
 - **Sketchfab_Scene and Irwin Vernon models** in Workspace — appear to be imported test/reference assets, may need cleanup
 - **Design StyleSheet system:** Built but not yet applied to MainHUD
 - **`upload_asset` / `get_asset_thumbnail` / `search_assets` MCP tools:** All fail or hang due to a missing ROBLOX_OPEN_CLOUD_API_KEY in this environment. Don't rely on them -- see the Icon Assets note in section 2.8 for the working manual-handoff workflow instead.
+- **Daily Worker Gifts reward is a placeholder:** `PLACEHOLDER_GIFT_REWARD_CASH = 150` in WorkerNotesGiftsStationService -- swap for the real reward once designed, one-line change.
+- **Daily Worker Gifts opening animation:** not yet built -- still deciding whether to add a lid rotation/scale tween on claim. The claim flow itself is complete and functional without it. See section 2.13.
 
 ---
 
@@ -639,7 +712,7 @@ window while Play-testing, under the collapsed "Attributes" section.
 
 The core tycoon gameplay loop is functional:
 - Players join → assigned a plot → buy droppers → buy conveyors → buy structures → buy workers → upgrade machines → collect cash
-- Data persists across sessions (cash, plot progression, centre level, upgrades, workers, purchased items, and the selected plot color) -- MiddleShops purchases are the exception, not yet persisted
+- Data persists across sessions (cash, plot progression, centre level, upgrades, workers, purchased items, the selected plot color, tutorial progress, and the Daily Worker Gifts cooldown) -- MiddleShops purchases are the exception, not yet persisted
 - All plot machine/structure/wall/glass accents and HiringKiosks respond to server-authoritative player color choices
 - Workers auto-collect cash balls
 - Visual/audio feedback for purchases, upgrades, and section completions
@@ -647,6 +720,7 @@ The core tycoon gameplay loop is functional:
 - 5 NPC shops (MiddleShops) are fully functional: walk up, interact, browse items, buy with in-game Cash, server validates and deducts, Creature Shop purchases grant a real (placeholder) Backpack item
 - CashHUDGroup icon buttons (Settings, Teleport to Tycoon) use real image icons with genuine transparency, and every CashHUDGroup button shows a hover tooltip naming itself
 - First-time players get a nine-step guided tutorial (dropper → cash → upgrade → 4 more droppers to finish the first row → worker centre → hire), with 3D arrow markers pointing at each target and a congratulations card on natural completion. Progress saves per step, so rejoining partway resumes where they left off; respawning mid-step is handled; and returning players never see it again (see section 2.12)
+- Daily Worker Gifts: a 24-hour Cash claim at the Worker Notes & Gifts station, with a server-enforced cooldown that survives rejoin and correctly refuses to grant anything off the back of a DataStore load failure. Reward is a flagged placeholder; countdown shows live on the station's world-space billboard and on the claim toast (see section 2.13)
 
 What's NOT yet built:
 - Pets system (placeholder only)
@@ -657,6 +731,7 @@ What's NOT yet built:
 - No game loop/win condition beyond tycoon progression
 - No mid-tutorial skip control -- once started, the only exit is finishing all nine steps (see section 2.12)
 - No admin tools or moderation systems
+- Daily Worker Gifts opening animation -- undecided whether to build it, and the real (non-placeholder) reward (see section 2.13)
 
 ---
 
@@ -675,6 +750,7 @@ What's NOT yet built:
 11. **Add admin/bug reporting** — consider adding admin commands or bug report UI for development
 12. **Performance optimization** — profile with 10 simultaneous players, optimize worker AI and ball spawning
 13. **Testing & QA** — full playtest with edge cases (rejoining, plot stealing prevention, DataStore failure handling)
+14. **Decide on the Daily Worker Gifts opening animation and real reward** — weigh whether a claim-time lid rotation/scale tween is worth building; the feature is fully functional without it (see section 2.13)
 
 ---
 
@@ -695,10 +771,8 @@ What's NOT yet built:
 - **Testing the tutorial without a fresh account:** set the Workspace attribute `StudioResetTutorial` to true in Edit mode (Studio-only, ignored when published) to make every joining player eligible again, or reset one player mid-session from the command bar with `require(game.ServerScriptService.TutorialProgressService).Reset(player)`. The tutorial's Player attributes (`TutorialEligible`, `TutorialStepIndex`, ...) only show up in the Properties window while Play-testing, under the collapsed "Attributes" section.
 - **Don't conflate unlocking the worker centre with hiring a worker.** `CentreSlots/Centre01_Worker/Activated` is the zone unlock (CentreZoneService); `CentreSlots/Centre01_Worker/WorkerActivations/Worker1` is an actual hired worker (WorkerSpawnerController at `Plot/HiringKiosk`). They're separate purchases. WorkerSpawnerController and the P1–P10 plots are Studio-native and not in the Rojo source tree, so section 2.3 is the best available description of them.
 - **Roblox asset upload/search tools are broken in this environment** (missing API key) — go straight to the manual Asset-Manager-import + asset-ID handoff workflow, don't waste a turn retrying `upload_asset` first.
+- **Testing the Daily Worker Gifts cooldown without waiting 24h:** run `require(game.ServerScriptService.WorkerGiftCooldownService).Reset(player)` from the Studio command bar (Server context) while play-testing -- resets just the gift timestamp, leaves Cash/plot color/tutorial progress untouched. Manually poking `player:SetAttribute("LastWorkerGiftClaim", ...)` and/or toggling `DataLoadFailed` is useful for exercising the boundary/guard cases directly. See section 2.13.
 
 ---
 
 This document reflects the state of the game as of the current session. It should be updated whenever major systems are added, changed, or removed.
-]]
-
-return nil
