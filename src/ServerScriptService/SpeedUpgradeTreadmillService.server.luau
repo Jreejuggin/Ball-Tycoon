@@ -216,7 +216,10 @@ local function wirePlot(plot: Instance): boolean
 
 	local function updatePad()
 		local owner = getOwner()
-		local shouldShow = owner ~= nil and not activated.Value
+		-- The real purchase pad stays completely hidden until the Avatar Centre
+		-- is bought. Before that, the client may show only the faint treadmill
+		-- preview when the centre itself is available.
+		local shouldShow = owner ~= nil and avatarActivated.Value and not activated.Value
 
 		buyPad.CanCollide = false
 		buyPad.CanQuery = shouldShow

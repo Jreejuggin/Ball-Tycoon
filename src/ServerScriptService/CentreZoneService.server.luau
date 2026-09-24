@@ -162,30 +162,9 @@ local function applyWorkerCentrePresentation(plot)
 	setModelPresentation(hiringKiosk, kioskMode, HIRING_KIOSK_GHOST_TRANSPARENCY)
 
 	-- WorkerSpeedService owns the speed statue's hidden, ghost, and purchased states.
-
-	-- The centre boundary markers and titles are scenery, not the purchase UI.
-	-- Keep the actual Worker Centre BuyPad available so the kiosk can be bought.
-	local markers = workerCentre:FindFirstChild("ZoneMarkers")
-	if markers then
-		if purchased then
-			local zoneFloor = markers:FindFirstChild("ZoneFloor")
-			local areaTitle = zoneFloor and zoneFloor:FindFirstChild("AreaTitle")
-			if areaTitle and areaTitle:IsA("SurfaceGui") then
-				areaTitle.Enabled = true
-			end
-		else
-			for _, descendant in ipairs(markers:GetDescendants()) do
-				if descendant:IsA("BasePart") then
-					descendant.Transparency = 1
-					descendant.CanCollide = false
-					descendant.CanTouch = false
-					descendant.CanQuery = false
-				elseif descendant:IsA("SurfaceGui") then
-					descendant.Enabled = false
-				end
-			end
-		end
-	end
+	-- Worker ZoneMarkers deliberately use updateSlotVisual below, exactly like
+	-- the other four centres. This keeps locked, available, and purchased
+	-- quadrant presentation consistent.
 end
 
 local function updateSlotVisual(plot, slot)
@@ -219,6 +198,12 @@ local function updateSlotVisual(plot, slot)
 
 	if status and status:IsA("StringValue") then
 		status.Value = state
+	end
+
+	-- Locked and available quadrants show their centre name. Once purchased,
+	-- all five quadrants keep their outline but retire the lettering.
+	if areaTitle and areaTitle:IsA("SurfaceGui") then
+		areaTitle.Enabled = state ~= "Purchased"
 	end
 
 	for _, edgeName in ipairs({"LeftEdge", "AisleEdge", "BackDivider", "FrontDivider"}) do

@@ -588,15 +588,16 @@ local function applyStationVisuals(station: Model, plot: Instance, unlocked: boo
 		part.CanTouch = false
 		part.CanQuery = false
 
-		if unlocked and style then
+		if not unlocked then
+			part.Transparency = 1
+			part.CastShadow = false
+		elseif style then
 			part.Color = style.color
 			part.Material = style.material
 			part.Transparency = purchased and 0 or 0.1
 			part.CastShadow = true
 		else
-			part.Color = COLOR_LOCKED
-			part.Material = Enum.Material.SmoothPlastic
-			part.Transparency = 0.55
+			part.Transparency = 1
 			part.CastShadow = false
 		end
 	end
@@ -608,8 +609,11 @@ local function applyStationVisuals(station: Model, plot: Instance, unlocked: boo
 
 	for _, part in ipairs({ standBase, standColumn, standTop }) do
 		if part and part:IsA("BasePart") then
-			part.Transparency = unlocked and 0 or 0.25
+			part.Transparency = unlocked and 0 or 1
 			part.CanCollide = unlocked
+			part.CanTouch = false
+			part.CanQuery = unlocked
+			part.CastShadow = unlocked
 		end
 	end
 	if standBase and standBase:IsA("BasePart") then
@@ -624,7 +628,11 @@ local function applyStationVisuals(station: Model, plot: Instance, unlocked: boo
 	if accent and accent:IsA("BasePart") then
 		accent.Color = unlocked and PlotTheme.GetPlotColor(plot) or COLOR_LOCKED
 		accent.Material = Enum.Material.SmoothPlastic
-		accent.Transparency = unlocked and 0 or 0.3
+		accent.Transparency = unlocked and 0 or 1
+		accent.CanCollide = false
+		accent.CanTouch = false
+		accent.CanQuery = unlocked
+		accent.CastShadow = unlocked
 	end
 end
 
@@ -741,7 +749,17 @@ local function wirePlot(plot: Instance): boolean
 		buyPad.CanCollide = false
 		buyPad.Material = Enum.Material.Neon
 
-		if activated.Value and owner then
+		-- Keep every real upgrade object and label hidden until the
+		-- Avatar Centre has actually been purchased.
+		if not unlocked then
+			buyPad.Transparency = 1
+			buyPad.CanTouch = false
+			buyPad.CanQuery = false
+			setLabel(station, false, "", COLOR_LOCKED)
+			return
+		end
+
+		if activated.Value then
 			buyPad.Transparency = 1
 			buyPad.CanTouch = false
 			buyPad.CanQuery = false
@@ -751,20 +769,7 @@ local function wirePlot(plot: Instance): boolean
 		end
 
 		buyPad.CanQuery = true
-		buyPad.Transparency = unlocked and 0.45 or 0.68
-
-		if not owner then
-			buyPad.Color = COLOR_LOCKED
-			buyPad.CanTouch = false
-			setLabel(station, true, "CLAIM THIS PLOT", COLOR_LOCKED)
-			return
-		end
-		if not dependencyMet() then
-			buyPad.Color = COLOR_LOCKED
-			buyPad.CanTouch = false
-			setLabel(station, true, "REQUIRES AVATAR CENTRE", COLOR_LOCKED)
-			return
-		end
+		buyPad.Transparency = 0.45
 
 		local cash = getCash(owner)
 		local affordable = cash ~= nil and (cash :: any).Value >= price.Value

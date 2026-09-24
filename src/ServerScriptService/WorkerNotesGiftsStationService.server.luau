@@ -31,7 +31,8 @@ local STATION_NAME = "WorkerNotesGiftsStation"
 local ORIGINAL_TRANSPARENCY_ATTRIBUTE = "WorkerGiftsUnlockedTransparency"
 local LOCKED_TRANSPARENCY = 1
 local AVAILABLE_TRANSPARENCY = 0.6
-local PAD_TRANSPARENCY = 0
+-- Match the existing Worker Speed purchase pad's softer Neon finish.
+local PAD_TRANSPARENCY = 0.5
 local PAD_REFRESH_SECONDS = 0.5
 local COLOR_GREEN = Color3.new(0, 1, 0)
 local COLOR_RED = Color3.new(0.8, 0.1, 0.1)

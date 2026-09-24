@@ -1,8 +1,9 @@
 -- StructureGhostPreviewScript (LocalScript)
--- Shows a local-only "ghost" preview of not-yet-purchased structure pieces
--- (walls, glass, and any future StructureGroup-tagged piece) when the plot's
--- OWNER walks close to that piece's buy pad. Nobody else sees this: it sets
--- the parts' Transparency directly from a LocalScript, which is a per-client
+-- Shows a local-only "ghost" preview of the current not-yet-purchased
+-- Home Centre stage when the plot OWNER approaches the single central
+-- StructureBuyPad. CurrentStructure is replicated by the server, so retired
+-- per-stage pad positions are never used. Nobody else sees this: it sets the
+-- parts' Transparency directly from a LocalScript, which is a per-client
 -- -only override -- property writes made by a LocalScript never replicate
 -- back to the server or to other players. Collision is untouched here on
 -- purpose -- unpurchased structure pieces are already non-colliding
@@ -76,26 +77,16 @@ local function findOwnedPlot()
 	return nil
 end
 
--- A slot's dependency must be met (its dependency slot purchased) before its
--- own ghost preview should ever show -- otherwise you could preview a piece
--- whose buy pad isn't even unlocked/visible yet. This mirrors
--- StructureBuyPadScript's own dependencyMet() exactly, so both scripts always
--- agree on what "unlocked" means. Generic by design: works for any slot with
--- a Dependency value, including future ones (Roof, Door, etc.) with no
--- changes needed here.
-local function dependencyMet(plot, structureSlots, slot)
-	local homeCentre = structureSlots.Parent
-	local homeActivated = homeCentre and homeCentre:FindFirstChild("Activated")
-	if not homeActivated or not homeActivated.Value then
-		return false
+-- Resolve the one slot represented by the new central buy pad. The server
+-- writes CurrentStructure, so the client never guesses which stage is active.
+local function getSlotForGroup(structureSlots, groupName)
+	for _, slot in ipairs(structureSlots:GetChildren()) do
+		local groupValue = slot:FindFirstChild("StructureGroup")
+		if groupValue and groupValue.Value == groupName then
+			return slot
+		end
 	end
-
-	local dependency = slot:FindFirstChild("Dependency")
-	if not dependency or dependency.Value == "" then return true end
-	local depSlot = structureSlots:FindFirstChild(dependency.Value)
-	local depPad = depSlot and depSlot:FindFirstChild("BuyPad")
-	local depActivated = depPad and depPad:FindFirstChild("Activated")
-	return depActivated ~= nil and depActivated.Value
+	return nil
 end
 
 -- Only reverts a part if its slot is confirmed STILL unpurchased right now.
@@ -133,33 +124,30 @@ while true do
 
 	local centreSlots = plot:FindFirstChild("CentreSlots")
 	local homeCentre = centreSlots and centreSlots:FindFirstChild("Centre02_Home")
+	local homeActivated = homeCentre and homeCentre:FindFirstChild("Activated")
 	local structureSlots = homeCentre and homeCentre:FindFirstChild("StructureSlots")
-	if not structureSlots then
+	local centralPad = homeCentre and homeCentre:FindFirstChild("StructureBuyPad")
+	if not homeActivated or not homeActivated.Value or not structureSlots or not centralPad then
 		clearAllGhosts()
 		continue
 	end
 
+	local groupName = centralPad:GetAttribute("CurrentStructure")
+	local slot = type(groupName) == "string"
+		and groupName ~= ""
+		and getSlotForGroup(structureSlots, groupName)
+	local slotPad = slot and slot:FindFirstChild("BuyPad")
+	local activated = slotPad and slotPad:FindFirstChild("Activated")
 	local nowGhosted = {}
 
-	for _, slot in ipairs(structureSlots:GetChildren()) do
-		local buyPad = slot:FindFirstChild("BuyPad")
-		local activated = buyPad and buyPad:FindFirstChild("Activated")
-		local groupVal = slot:FindFirstChild("StructureGroup")
-
-		-- Only preview slots that are actually purchasable right now: not
-		-- already bought, have a valid StructureGroup to preview, AND their
-		-- dependency (if any) has been met -- otherwise this would preview a
-		-- piece whose own buy pad isn't even unlocked/visible yet.
-		if buyPad and activated and groupVal and not activated.Value
-			and dependencyMet(plot, structureSlots, slot) then
-			local dist = (hrp.Position - buyPad.Position).Magnitude
-			if dist <= TRIGGER_RADIUS then
-				for _, part in ipairs(getTargetParts(plot, groupVal.Value)) do
-					part.Transparency = GHOST_TRANSPARENCY
-					part.CanCollide = false
-					nowGhosted[part] = activated
-				end
-			end
+	-- Preview only the stage currently advertised by the central pad, and
+	-- measure approach distance from that same pad rather than retired pads.
+	if activated and not activated.Value
+		and (hrp.Position - centralPad.Position).Magnitude <= TRIGGER_RADIUS then
+		for _, part in ipairs(getTargetParts(plot, groupName)) do
+			part.Transparency = GHOST_TRANSPARENCY
+			part.CanCollide = false
+			nowGhosted[part] = activated
 		end
 	end
 

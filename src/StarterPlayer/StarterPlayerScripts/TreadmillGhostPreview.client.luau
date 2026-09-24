@@ -29,11 +29,19 @@ local function findVisibleSlot()
 		local ownerId = plot and tonumber(plot:GetAttribute("Owner"))
 		local centreSlots = plot and plot:FindFirstChild("CentreSlots")
 		local avatarCentre = centreSlots and centreSlots:FindFirstChild("Centre03_Avatar")
+		local avatarActivated = avatarCentre and avatarCentre:FindFirstChild("Activated")
+		local avatarStatus = avatarCentre and avatarCentre:FindFirstChild("Status")
 		local upgrades = avatarCentre and avatarCentre:FindFirstChild("Upgrades")
 		local slot = upgrades and upgrades:FindFirstChild("SpeedUpgradeTreadmill")
 		local activated = slot and slot:FindFirstChild("Activated")
+		local centrePreviewAllowed = avatarActivated
+			and avatarActivated:IsA("BoolValue")
+			and avatarStatus
+			and avatarStatus:IsA("StringValue")
+			and (avatarActivated.Value or avatarStatus.Value == "Available")
 
 		if plot
+			and centrePreviewAllowed
 			and slot
 			and activated
 			and activated:IsA("BoolValue")
