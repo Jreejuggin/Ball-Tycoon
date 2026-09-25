@@ -384,11 +384,28 @@ plus the four controllers extracted from the binary as loose .luau files
 (ShopPanelController and CashPackPanelController became ModuleScripts taking
 the panel to populate, since their panels no longer exist at sync time).
 
-The new ScreenGui is `Enabled=false` and both its LocalScripts are
-`Disabled=true`, so it has no effect on the live game yet. Every component is
-verified property-by-property against the binary via rbxmk. Still to do:
-enable and compare side by side in Studio, then delete MainHUD.rbxm and rename
-the directory to MainHUD.
+MainHUDCode is now enabled and confirmed working in Studio. Every component is
+verified property-by-property against the binary via rbxmk.
+
+**The old MainHUD.rbxm is kept, not deleted** -- it stays in the repo as a
+fallback, but is listed in `globIgnorePaths` in default.project.json so Rojo
+no longer syncs it into the place. Restoring it is a matter of removing that
+one line (or importing the file into Studio by hand).
+
+It is excluded rather than disabled in place because Rojo cannot set
+properties on an .rbxm at all: a sibling `MainHUD.meta.json` is accepted
+without error and then silently ignored (verified -- Enabled stayed true), and
+even if it worked it could only reach the top-level ScreenGui, not the
+LocalScripts nested inside it. Disabling a ScreenGui does not stop its
+LocalScripts, so leaving it synced would mean two MainHUDControllers running
+against the same PanelManager.
+
+NOTE for anyone whose Studio place already contains the old MainHUD: because
+StarterGui is mapped with `$ignoreUnknownInstances: true`, Rojo will not
+remove it for you. Delete or disable it once, by hand, or it will keep running
+alongside MainHUDCode.
+
+Still to do: rename MainHUDCode to MainHUD (see the Tooltip note below).
 
 Two things to know when finishing it:
 - `ReplicatedStorage.Tooltip` finds its label via
@@ -412,11 +429,10 @@ Two things to know when finishing it:
 **UI Effects & Shared Modules:**
 - **ButtonHoverEffect** (ReplicatedStorage): scale + lift tween on hover,
   shared hover/click sounds (Sound instances created once in SoundService,
-  reused). hoverSoundId/clickSoundId in UISoundConfig are currently EMPTY
-  placeholders -- verified that Roblox's built-in rbxasset:// sound paths
-  don't resolve in this project, so a real uploaded/Marketplace sound ID is
-  needed before any sound actually plays. Hover animation itself works
-  regardless.
+  reused). hoverSoundId and clickSoundId in UISoundConfig now hold real
+  uploaded asset IDs, so both sounds do play -- the file's comment block still
+  describes them as empty placeholders and is out of date. Hover animation
+  works independently of the sounds either way.
 - **Tooltip** (ReplicatedStorage): `Tooltip.attach(button, text, options?)`.
   Uses ONE reusable label (StarterGui.MainHUD.Tooltip, AutomaticSize.X,
   ZIndex 100) instead of creating an instance per button. Shows on

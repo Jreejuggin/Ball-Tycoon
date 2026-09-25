@@ -5,7 +5,8 @@
   "globIgnorePaths": [
     "src/ReplicatedStorage/Design/**",
     "src/ServerStorage/LegacyAssets",
-    "src/ServerStorage/LegacyAssets/**"
+    "src/ServerStorage/LegacyAssets/**",
+    "src/StarterGui/MainHUD.rbxm"
   ],
   "servePlaceIds": [
     95130979463573,

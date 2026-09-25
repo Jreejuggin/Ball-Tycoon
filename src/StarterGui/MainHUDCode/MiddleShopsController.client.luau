@@ -17,6 +17,7 @@ local player = Players.LocalPlayer
 
 local PanelManager = require(ReplicatedStorage:WaitForChild("PanelManager"))
 local ShopRowBuilder = require(ReplicatedStorage:WaitForChild("ShopRowBuilder"))
+local ButtonHoverEffect = require(ReplicatedStorage:WaitForChild("ButtonHoverEffect"))
 
 local purchaseEvent = ReplicatedStorage:WaitForChild("MiddleShopPurchaseEvent")
 
@@ -99,9 +100,14 @@ for _, definition in ipairs(SHOP_DEFINITIONS) do
 	ShopRowBuilder.buildRows(panel.ItemList, config, definition.logPrefix, makeCashPurchaseHandler(definition.configName))
 	PanelManager.registerPanel(panel)
 
-	panel.TitleBar.CloseButton.MouseButton1Click:Connect(function()
+	local closeButton = panel.TitleBar.CloseButton
+	closeButton.MouseButton1Click:Connect(function()
 		PanelManager.closeAll()
 	end)
+
+	-- Buy buttons get this from ShopRowBuilder; without it these close buttons
+	-- were the only shop buttons with no hover animation or sound.
+	ButtonHoverEffect.apply(closeButton)
 
 	-- Wire the NPC's ProximityPrompt.
 	local prompt = resolvePath(middleShops, definition.promptPath)
