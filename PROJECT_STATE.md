@@ -384,29 +384,40 @@ CashPackPanelController are ModuleScripts taking the panel to populate, since
 their panels no longer exist at sync time -- MainHUDController calls both).
 
 Confirmed working in Studio, and every component is verified
-property-by-property against the old binary via rbxmk. To re-check after
-editing the builder, build the tree in-process with `rbxmk.loadFile` and diff
-it against src/StarterGui/MainHUD.rbxm; the one property that cannot be
-verified this way is FontFace (see below).
+property-by-property against the original hand-placed layout via rbxmk. To
+re-check after editing the builder, build the tree in-process with
+`rbxmk.loadFile` and diff it against
+src/StarterGui/MainHUD_VisualReference.rbxm (see below); the one property that
+cannot be verified this way is FontFace, since rbxmk silently drops FontFace
+when it reads an .rbxm -- never round-trip either .rbxm in this section
+through rbxmk, only read from it.
 
-**The old MainHUD.rbxm is kept, not deleted** -- it stays in the repo as a
-fallback, but is listed in `globIgnorePaths` in default.project.json so Rojo
-no longer syncs it into the place. Restoring it is a matter of removing that
-one line (or importing the file into Studio by hand).
+**`src/StarterGui/MainHUD_VisualReference.rbxm` is the original hand-placed
+UI, kept on purpose as a Studio-only visual reference.** MainHUDBuilder has no
+visual editor -- to preview or tweak a size/position/color by eye rather than
+by reasoning about numbers, open this instead. It syncs into StarterGui as
+`MainHUD_VisualReference` (a ScreenGui, `Enabled = false`, both LocalScripts
+inside it `Disabled = true`), so Studio's edit-mode viewport still renders it
+for inspection, but it never appears at runtime and never executes a
+controller. It is NOT kept in sync with MainHUDCode changes going forward --
+edit it in Studio if you want an updated reference, or delete it if it's no
+longer useful.
 
-It is excluded rather than disabled in place because Rojo cannot set
-properties on an .rbxm at all: a sibling `MainHUD.meta.json` is accepted
-without error and then silently ignored (verified -- Enabled stayed true), and
-even if it worked it could only reach the top-level ScreenGui, not the
-LocalScripts nested inside it. Disabling a ScreenGui does not stop its
-LocalScripts, so leaving it synced would mean two MainHUDControllers running
-against the same PanelManager.
+To change it: edit live in Studio (drag/resize/whatever), then right-click the
+top-level `MainHUD_VisualReference` instance -> **Save to File** -> overwrite
+this same path. That round-trip goes through Studio's own serializer, not
+rbxmk, so fonts are safe. Do not rename the live instance back to `MainHUD` --
+that's the name the real, code-driven ScreenGui (`src/StarterGui/MainHUD/`)
+needs for `ReplicatedStorage.Tooltip`'s `PlayerGui:WaitForChild("MainHUD")`
+lookup to keep working, and Roblox allows two siblings with the same name
+without erroring, which just means whichever the client finds first wins.
 
-NOTE for anyone whose Studio place already contains the old hand-placed
-MainHUD: because StarterGui is mapped with `$ignoreUnknownInstances: true`,
-Rojo will not remove it for you, and the directory above syncs to the same
-name. Delete the old one once, by hand, or two MainHUDControllers will run
-against the same PanelManager.
+GOTCHA if you're re-adding an exclusion or otherwise editing
+`globIgnorePaths`: `rojo serve` loads `default.project.json` once at startup
+and does not appear to hot-reload changes to the project file's own
+structure. If a change like this doesn't seem to take effect in Studio after
+reconnecting, restart the `rojo serve` process itself, not just the Studio
+plugin connection.
 
 Two things to keep in mind when editing this UI:
 - `ReplicatedStorage.Tooltip` resolves its label via
