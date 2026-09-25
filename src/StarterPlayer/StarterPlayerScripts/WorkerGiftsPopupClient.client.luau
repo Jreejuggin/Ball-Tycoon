@@ -4,6 +4,7 @@
 -- server-side prompt, ownership validation, and RemoteEvent can stay in place.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
@@ -84,6 +85,29 @@ messageText.Parent = popup
 
 local popupSequence = 0
 local activeTween: Tween? = nil
+local activeCountdownConnection: RBXScriptConnection? = nil
+
+-- Second-precision, for the popup's own ~3.25s visible window only (the "Xh Ym"
+-- rounding on the world-space billboard is too coarse to visibly tick in 3s).
+local function formatCountdownPrecise(remainingSeconds: number): string
+	local totalSeconds = math.max(0, math.floor(remainingSeconds))
+	local hours = math.floor(totalSeconds / 3600)
+	local minutes = math.floor((totalSeconds % 3600) / 60)
+	local seconds = totalSeconds % 60
+	if hours > 0 then
+		return ("%dh %dm %ds"):format(hours, minutes, seconds)
+	elseif minutes > 0 then
+		return ("%dm %ds"):format(minutes, seconds)
+	end
+	return ("%ds"):format(seconds)
+end
+
+local function stopCountdown()
+	if activeCountdownConnection then
+		activeCountdownConnection:Disconnect()
+		activeCountdownConnection = nil
+	end
+end
 
 local function showPopup(payload: any)
 	popupSequence += 1
@@ -92,6 +116,7 @@ local function showPopup(payload: any)
 	if activeTween then
 		activeTween:Cancel()
 	end
+	stopCountdown()
 
 	if typeof(payload) == "table" then
 		titleText.Text = tostring(payload.title or "Daily Worker Gifts")
@@ -99,6 +124,23 @@ local function showPopup(payload: any)
 	else
 		titleText.Text = "Daily Worker Gifts"
 		messageText.Text = "The station was opened."
+	end
+
+	local remainingSeconds = typeof(payload) == "table" and tonumber(payload.remainingSeconds) or nil
+	if typeof(payload) == "table" and payload.outcome == "OnCooldown" and remainingSeconds then
+		-- Anchored to elapsed client time since this specific popup was shown, not
+		-- a persisted clock: the real 24h gate is enforced server-side on interact,
+		-- this is purely cosmetic motion for the ~3.25s the toast is on screen.
+		local shownAt = os.clock()
+		activeCountdownConnection = RunService.Heartbeat:Connect(function()
+			if sequence ~= popupSequence then
+				return
+			end
+			local liveRemaining = math.max(0, remainingSeconds - (os.clock() - shownAt))
+			messageText.Text = ("Come back in %s for your next gift!"):format(
+				formatCountdownPrecise(liveRemaining)
+			)
+		end)
 	end
 
 	popup.Visible = true
@@ -119,6 +161,8 @@ local function showPopup(payload: any)
 		if sequence ~= popupSequence then
 			return
 		end
+
+		stopCountdown()
 
 		activeTween = TweenService:Create(
 			popup,

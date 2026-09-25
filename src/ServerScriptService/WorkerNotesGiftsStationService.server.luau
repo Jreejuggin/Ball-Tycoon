@@ -12,6 +12,7 @@ local PurchaseSoundModule = require(ReplicatedStorage:WaitForChild("PurchaseSoun
 local StationTheme = require(
 	ServerStorage:WaitForChild("Modules"):WaitForChild("WorkerNotesGiftsStationTheme")
 )
+local WorkerGiftCooldownService = require(script.Parent.WorkerGiftCooldownService)
 
 local INTERACTION_EVENT_NAME = "WorkerGiftsInteractionEvent"
 local interactionEvent: RemoteEvent
@@ -44,6 +45,10 @@ local POPUP_MESSAGES = {
 	"The Worker Gifts station is ready!",
 }
 local popupRandom = Random.new()
+
+-- PLACEHOLDER reward. Swap this single line for the real Daily Worker Gifts
+-- reward once it's finalized; nothing else about the claim flow needs to change.
+local PLACEHOLDER_GIFT_REWARD_CASH = 150
 local lastInteractionAtByUserId: { [number]: number } = {}
 
 local function formatPrice(value: number): string
@@ -56,6 +61,17 @@ local function formatPrice(value: number): string
 		end
 	end
 	return "$" .. formatted
+end
+
+local function formatCooldownRemaining(remainingSeconds: number): string
+	-- Rounds up so a nonzero cooldown never displays as "0m".
+	local totalMinutes = math.max(1, math.ceil(remainingSeconds / 60))
+	local hours = math.floor(totalMinutes / 60)
+	local minutes = totalMinutes % 60
+	if hours > 0 then
+		return ("%dh %dm"):format(hours, minutes)
+	end
+	return ("%dm"):format(minutes)
 end
 
 local function ensureBillboard(parent: Instance, name: string): BillboardGui
@@ -345,6 +361,28 @@ local function wirePlot(plot: Instance): boolean
 		station:SetAttribute("PurchasePrice", price.Value)
 	end
 
+	-- Live world-space countdown on the persistent "Daily worker gifts" billboard.
+	-- Reflects the plot OWNER's cooldown (matching how the pad already shows the
+	-- owner's affordability to any visitor), refreshed by the same 0.5s loop that
+	-- drives updatePad, so it never runs its own timer or free-running clock.
+	local function updateGiftStatus()
+		local owner = getOwnerPlayer(plot)
+		if not owner then
+			statusBenefitText.Text = "🎁 1 gift/day"
+			statusBenefitText.TextColor3 = Color3.fromRGB(255, 235, 90)
+			return
+		end
+
+		if WorkerGiftCooldownService.IsAvailable(owner) then
+			statusBenefitText.Text = "🎁 Ready to claim!"
+			statusBenefitText.TextColor3 = COLOR_GREEN
+		else
+			local remainingSeconds = WorkerGiftCooldownService.GetRemainingSeconds(owner)
+			statusBenefitText.Text = ("🎁 Ready in %s"):format(formatCooldownRemaining(remainingSeconds))
+			statusBenefitText.TextColor3 = Color3.fromRGB(255, 235, 90)
+		end
+	end
+
 	local function applyState()
 		local hasOwner = plot:GetAttribute("Owner") ~= nil
 		local workerPurchased = hasOwner and workerOne.Value
@@ -354,8 +392,7 @@ local function wirePlot(plot: Instance): boolean
 		interactionPrompt.Enabled = purchased
 		statusTitleText.Text = "Daily worker gifts"
 		statusTitleText.TextColor3 = Color3.fromRGB(0, 225, 255)
-		statusBenefitText.Text = "🎁 1 gift/day"
-		statusBenefitText.TextColor3 = Color3.fromRGB(255, 235, 90)
+		updateGiftStatus()
 
 		-- Worker Gifts stays hidden until Worker1 is purchased, then becomes
 		-- a 0.6 ghost purchase and finally turns solid after its own purchase.
@@ -393,10 +430,15 @@ local function wirePlot(plot: Instance): boolean
 	end
 
 	interactionPrompt.Triggered:Connect(function(player: Player)
+		-- Ownership and purchase state come from server-owned instances (the
+		-- prompt's own Triggered event already only fires server-side), so
+		-- nothing here trusts anything the client claims about itself.
 		if not activated.Value or plot:GetAttribute("Owner") ~= player.UserId then
 			return
 		end
 
+		-- Short re-entrancy debounce so a single interact can't double-fire the
+		-- claim within the same second; the real gate is the 24h cooldown below.
 		local now = os.clock()
 		local lastInteractionAt = lastInteractionAtByUserId[player.UserId] or 0
 		if now - lastInteractionAt < INTERACTION_COOLDOWN_SECONDS then
@@ -404,10 +446,38 @@ local function wirePlot(plot: Instance): boolean
 		end
 		lastInteractionAtByUserId[player.UserId] = now
 
+		if not WorkerGiftCooldownService.IsAvailable(player) then
+			local remainingSeconds = WorkerGiftCooldownService.GetRemainingSeconds(player)
+			interactionEvent:FireClient(player, {
+				title = "Daily Worker Gifts",
+				message = ("Come back in %s for your next gift!"):format(
+					formatCooldownRemaining(remainingSeconds)
+				),
+				outcome = "OnCooldown",
+				remainingSeconds = remainingSeconds,
+			})
+			updateGiftStatus()
+			return
+		end
+
+		-- No yields between the availability check above and MarkClaimed here,
+		-- so two triggers in the same tick can't both pass the check and claim.
+		local cash = getCash(player)
+		if cash then
+			cash.Value += PLACEHOLDER_GIFT_REWARD_CASH
+		end
+		WorkerGiftCooldownService.MarkClaimed(player)
+
 		interactionEvent:FireClient(player, {
 			title = "Daily Worker Gifts",
-			message = POPUP_MESSAGES[popupRandom:NextInteger(1, #POPUP_MESSAGES)],
+			message = ("%s (+%s)"):format(
+				POPUP_MESSAGES[popupRandom:NextInteger(1, #POPUP_MESSAGES)],
+				formatPrice(PLACEHOLDER_GIFT_REWARD_CASH)
+			),
+			outcome = "Claimed",
+			amountGranted = PLACEHOLDER_GIFT_REWARD_CASH,
 		})
+		updateGiftStatus()
 	end)
 
 	head.Touched:Connect(function(hit: BasePart)
@@ -453,6 +523,7 @@ local function wirePlot(plot: Instance): boolean
 	plot:GetAttributeChangedSignal("PlotColor"):Connect(applyState)
 
 	table.insert(padRefreshers, updatePad)
+	table.insert(padRefreshers, updateGiftStatus)
 	applyState()
 	return true
 end
