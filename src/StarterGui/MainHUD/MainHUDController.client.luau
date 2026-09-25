@@ -135,11 +135,22 @@ petsCloseButton.MouseButton1Click:Connect(closeAllPanels)
 cashPackCloseButton.MouseButton1Click:Connect(closeAllPanels)
 
 -- ===== Settings toggles =====
+-- Each ToggleButton is a pill-shaped track with a circular Knob child (see
+-- MainHUDBuilder) that slides between the two ends, iOS-switch style.
+local TOGGLE_TWEEN_INFO = TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local TOGGLE_ON_COLOR = Color3.fromRGB(72, 199, 107)
+local TOGGLE_OFF_COLOR = Color3.fromRGB(90, 92, 98)
+local TOGGLE_KNOB_ON_POSITION = UDim2.new(1, -27, 0.5, 0)
+local TOGGLE_KNOB_OFF_POSITION = UDim2.new(0, 3, 0.5, 0)
+
 local function setToggleAppearance(button, isOn)
-	button.Text = isOn and "ON" or "OFF"
-	button.BackgroundColor3 = isOn
-		and Color3.fromRGB(72, 199, 107)
-		or Color3.fromRGB(90, 92, 98)
+	local knob = button:WaitForChild("Knob")
+	TweenService:Create(button, TOGGLE_TWEEN_INFO, {
+		BackgroundColor3 = isOn and TOGGLE_ON_COLOR or TOGGLE_OFF_COLOR,
+	}):Play()
+	TweenService:Create(knob, TOGGLE_TWEEN_INFO, {
+		Position = isOn and TOGGLE_KNOB_ON_POSITION or TOGGLE_KNOB_OFF_POSITION,
+	}):Play()
 end
 
 -- MusicGUI owns the actual mute state and the Sound instance. This HUD only

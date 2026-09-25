@@ -285,7 +285,12 @@ local function buildSettingsPanel(gui)
 
 	-- MusicRow keeps BorderSizePixel at its default of 1 while SFXRow sets 0.
 	-- Invisible either way (the rows are transparent), but reproduced as-is.
-	local function toggleRow(name, labelText, layoutOrder, borderSizePixel, toggleTextColor)
+	--
+	-- ToggleButton is the switch's pill-shaped track (already fully rounded --
+	-- corner radius 15 on a 30px-tall track); Knob is the circular thumb that
+	-- MainHUDController slides between the two ends. Both start in the "on"
+	-- position/color since Music and SFX default to unmuted.
+	local function toggleRow(name, labelText, layoutOrder, borderSizePixel)
 		local row = new("Frame", {
 			Name = name,
 			Size = UDim2.new(1, 0, 0, 44),
@@ -313,22 +318,25 @@ local function buildSettingsPanel(gui)
 			Position = UDim2.new(1, -60, 0.5, -15),
 			BackgroundColor3 = Color3.fromRGB(71, 199, 107),
 			BorderSizePixel = 0,
-			Text = "ON",
-			TextColor3 = toggleTextColor,
-			Font = Enum.Font.GothamBold,
-			TextSize = 15,
-			TextStrokeTransparency = 0,
+			Text = "",
 		}, row)
 		corner(15, toggle)
+
+		local knob = new("Frame", {
+			Name = "Knob",
+			Size = UDim2.new(0, 24, 0, 24),
+			Position = UDim2.new(1, -27, 0.5, 0),
+			AnchorPoint = Vector2.new(0, 0.5),
+			BackgroundColor3 = WHITE,
+			BorderSizePixel = 0,
+		}, toggle)
+		new("UICorner", { CornerRadius = UDim.new(0.5, 0) }, knob)
 
 		return row
 	end
 
-	-- Spec described both toggles as identical. The Music toggle's text is
-	-- actually pink and the SFX toggle's is white; MainHUDController only
-	-- rewrites their BackgroundColor3, so this difference is visible in game.
-	toggleRow("MusicRow", "Music", 2, 1, Color3.fromRGB(255, 122, 208))
-	toggleRow("SFXRow", "SFX", 3, 0, WHITE)
+	toggleRow("MusicRow", "Music", 2, 1)
+	toggleRow("SFXRow", "SFX", 3, 0)
 
 	return panel
 end
