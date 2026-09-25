@@ -32,6 +32,7 @@ local creaturePlaceholderTemplate = ServerStorage:WaitForChild("CreatureShopPlac
 local ALLOWED_CONFIG_NAMES = {
 	"CreatureShopConfig",
 	"BallShopConfig",
+	"GearShopConfig",
 	"TradingPostConfig",
 	"VaultConfig",
 	"UpgradeShopConfig",

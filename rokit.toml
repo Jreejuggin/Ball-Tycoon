@@ -5,3 +5,4 @@
 
 [tools]
 rojo = "rojo-rbx/rojo@7.7.0"
+rbxmk = "Anaminus/rbxmk@0.9.1"
