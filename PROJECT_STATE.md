@@ -376,16 +376,18 @@ in each config, no other code changes needed.
   — see section 2.4b
 - RichestBanner, HealthBar
 
-**IN PROGRESS — MainHUD is being migrated from .rbxm to code.** The live UI is
-still the hand-placed `src/StarterGui/MainHUD.rbxm` described above. Alongside
-it, `src/StarterGui/MainHUDCode/` holds a code-driven replacement: a
+**MainHUD is now built in code, not hand-placed.** `src/StarterGui/MainHUD/`
+is a directory, not an .rbxm: an init.meta.json defining the ScreenGui, a
 MainHUDBuilder ModuleScript that constructs the whole tree with Instance.new,
-plus the four controllers extracted from the binary as loose .luau files
-(ShopPanelController and CashPackPanelController became ModuleScripts taking
-the panel to populate, since their panels no longer exist at sync time).
+and the four controllers as loose .luau files (ShopPanelController and
+CashPackPanelController are ModuleScripts taking the panel to populate, since
+their panels no longer exist at sync time -- MainHUDController calls both).
 
-MainHUDCode is now enabled and confirmed working in Studio. Every component is
-verified property-by-property against the binary via rbxmk.
+Confirmed working in Studio, and every component is verified
+property-by-property against the old binary via rbxmk. To re-check after
+editing the builder, build the tree in-process with `rbxmk.loadFile` and diff
+it against src/StarterGui/MainHUD.rbxm; the one property that cannot be
+verified this way is FontFace (see below).
 
 **The old MainHUD.rbxm is kept, not deleted** -- it stays in the repo as a
 fallback, but is listed in `globIgnorePaths` in default.project.json so Rojo
@@ -400,17 +402,16 @@ LocalScripts nested inside it. Disabling a ScreenGui does not stop its
 LocalScripts, so leaving it synced would mean two MainHUDControllers running
 against the same PanelManager.
 
-NOTE for anyone whose Studio place already contains the old MainHUD: because
-StarterGui is mapped with `$ignoreUnknownInstances: true`, Rojo will not
-remove it for you. Delete or disable it once, by hand, or it will keep running
-alongside MainHUDCode.
+NOTE for anyone whose Studio place already contains the old hand-placed
+MainHUD: because StarterGui is mapped with `$ignoreUnknownInstances: true`,
+Rojo will not remove it for you, and the directory above syncs to the same
+name. Delete the old one once, by hand, or two MainHUDControllers will run
+against the same PanelManager.
 
-Still to do: rename MainHUDCode to MainHUD (see the Tooltip note below).
-
-Two things to know when finishing it:
-- `ReplicatedStorage.Tooltip` finds its label via
-  `PlayerGui:WaitForChild("MainHUD")` by name, so tooltips will not work in
-  MainHUDCode until that final rename.
+Two things to keep in mind when editing this UI:
+- `ReplicatedStorage.Tooltip` resolves its label via
+  `PlayerGui:WaitForChild("MainHUD")` by name, so the ScreenGui must keep the
+  name MainHUD -- i.e. do not rename that directory.
 - Fonts are the one property rbxmk cannot read out of an .rbxm (it silently
   drops FontFace), so the builder's Font values came from a written spec and
   are the one thing unverified against the original. Never round-trip an
