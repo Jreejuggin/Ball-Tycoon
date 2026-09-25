@@ -59,12 +59,22 @@ Players.PlayerAdded:Connect(function(player)
 	cash.Value = 0
 	cash.Parent = leaderstats
 
+	local bankData = Instance.new("Folder")
+	bankData.Name = "BankData"
+	bankData.Parent = player
+
+	local bankedCash = Instance.new("IntValue")
+	bankedCash.Name = "BankedCash"
+	bankedCash.Value = 0
+	bankedCash.Parent = bankData
+
 	local success, savedData = pcall(function()
 		return playerDataStore:GetAsync(player.UserId)
 	end)
 
 	if success and type(savedData) == "table" then
 		cash.Value = tonumber(savedData.Cash) or 0
+		bankedCash.Value = tonumber(savedData.BankedCash) or 0
 		player:SetAttribute("SavedUpgradeLevel", tonumber(savedData.UpgradeLevel) or 1)
 	else
 		player:SetAttribute("SavedUpgradeLevel", 1)
@@ -113,6 +123,7 @@ end)
 
 local function getPlayerData(player)
 	local cash = player:FindFirstChild("leaderstats") and player.leaderstats:FindFirstChild("Cash")
+	local bankedCash = player:FindFirstChild("BankData") and player.BankData:FindFirstChild("BankedCash")
 	local plot = getAssignedPlot(player)
 
 	local purchasedItems = {}
@@ -139,6 +150,7 @@ local function getPlayerData(player)
 
 	return {
 		Cash = cash and cash.Value or 0,
+		BankedCash = bankedCash and bankedCash.Value or 0,
 		UpgradeLevel = upgradeLevel,
 		CentreLevel = centreLevel,
 		PlotColor = serializedPlotColor,
