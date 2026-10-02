@@ -48,6 +48,9 @@ Theme.font = {
 Theme.asset = {
 	teleportIcon = "rbxassetid://79152891526373",
 	settingsIcon = "rbxassetid://86564279252401",
+	-- 256x256 tileable diagonal stripes. White RGB with the pattern in the
+	-- alpha channel, so ImageColor3 decides what colour the stripes come out.
+	stripePattern = "rbxassetid://84907664693950",
 }
 
 --=============================================================== shared chrome
@@ -83,6 +86,12 @@ Theme.itemList = {
 	scrollBarThickness = 6,
 	rowSpacing = 10,
 	paddingRight = 10,
+	-- Room for each row's UIStroke, which draws outside the row. 2 covers the
+	-- thickest row stroke in use. paddingRight is larger because it also has to
+	-- clear the scrollbar.
+	paddingLeft = 2,
+	paddingTop = 2,
+	paddingBottom = 2,
 	goldScrollBar = Color3.fromRGB(210, 165, 60),
 	greenScrollBar = Color3.fromRGB(80, 210, 100),
 }
@@ -287,8 +296,29 @@ Theme.cashPackPanel = {
 	cornerRadius = 20,
 	strokeThickness = 3,
 	strokeTransparency = 0,
-	strokeColor = Color3.fromRGB(70, 200, 90),
+	strokeColor = Color3.fromRGB(232, 240, 236),
 	padding = 14,
+
+	-- Present only in this theme, so the production theme's TitleBar stays
+	-- flat and transparent. MainHUDBuilder applies a surface only when the key
+	-- exists, which is what keeps the two themes swappable despite differing.
+	titleBarSurface = {
+		image = Theme.asset.stripePattern,
+		cornerRadius = 14,
+		gradientRotation = 90,
+		gradientTop = Color3.fromRGB(142, 238, 110),
+		gradientBottom = Color3.fromRGB(58, 183, 62),
+		strokeColor = Color3.fromRGB(232, 240, 236),
+		strokeThickness = 3,
+		tileSize = UDim2.fromOffset(72, 72),
+		patternColor = Color3.fromRGB(0, 0, 0),
+		patternTransparency = 0.8,
+		-- Deliberately NOT clipped: the CloseButton grows to 43.2px and lifts
+		-- 4px inside this 44px bar, so clipping here shaved 3.6px off its hover
+		-- pop. The bar's tiles are masked by the PatternLayer's own UICorner
+		-- instead, and the CloseButton clips its own tiles via closeSurface.
+		clipsDescendants = false,
+	},
 
 	titleBarHeight = 44,
 	badgeSize = UDim2.new(0, 40, 0, 40),
@@ -314,6 +344,30 @@ Theme.cashPackPanel = {
 	closeTextSize = 20,
 	closeTextColor = Theme.color.white,
 	closeStrokeTransparency = 0,
+
+	-- The X button's stripes. No gradient was specified for it, so these two
+	-- reds are DERIVED from the existing closeColor (220,60,60) -- a lighter
+	-- top and darker bottom mirroring how the green gradients are built. Tune
+	-- freely; nothing else depends on them. tileSize is likewise scaled down
+	-- for a 40x40 button rather than copied from the 90x40 Buy button.
+	--
+	-- Clipping is safe here (unlike on the TitleBar): this button's only
+	-- children are the pattern and caption, both fromScale(1,1), so they grow
+	-- with it during the hover tween and never overflow.
+	closeSurface = {
+		image = Theme.asset.stripePattern,
+		cornerRadius = 10,
+		gradientRotation = 90,
+		gradientTop = Color3.fromRGB(240, 105, 105),
+		gradientBottom = Color3.fromRGB(183, 45, 45),
+		strokeColor = Color3.fromRGB(232, 240, 236),
+		strokeThickness = 3,
+		tileSize = UDim2.fromOffset(40, 40),
+		patternColor = Color3.fromRGB(0, 0, 0),
+		patternTransparency = 0.8,
+		clipsDescendants = true,
+		captionText = "X",
+	},
 
 	listTopOffset = 54,
 	scrollBarColor = Theme.itemList.greenScrollBar,
@@ -402,9 +456,33 @@ Theme.cashPackRow = {
 	height = 84,
 	background = Color3.fromRGB(18, 22, 18),
 	cornerRadius = 14,
-	strokeColor = Color3.fromRGB(70, 200, 90),
-	strokeThickness = 1.5,
+	strokeColor = Color3.fromRGB(96, 105, 118),
+	strokeThickness = 2,
+	-- Transparency was not specified for the new stroke; keeping the existing
+	-- 0.2 is what makes it read as subtle rather than a hard outline.
 	strokeTransparency = 0.2,
+
+	-- As with titleBarSurface: present only here, so production's Buy buttons
+	-- keep their plain gradient, their own "BUY" text and no pattern layer.
+	buySurface = {
+		image = Theme.asset.stripePattern,
+		cornerRadius = 11,
+		gradientRotation = 90,
+		gradientTop = Color3.fromRGB(158, 243, 120),
+		gradientBottom = Color3.fromRGB(70, 196, 68),
+		strokeColor = Color3.fromRGB(232, 240, 236),
+		strokeThickness = 3,
+		tileSize = UDim2.fromOffset(56, 56),
+		patternColor = Color3.fromRGB(0, 0, 0),
+		patternTransparency = 0.8,
+		-- No downside here: the pattern and caption are both fromScale(1,1), so
+		-- they grow with the button during the hover tween and never overflow.
+		clipsDescendants = true,
+		-- The pattern is a child, and children always render above their
+		-- parent, so it would cover the button's own Text. The caption goes in
+		-- a sibling TextLabel with a higher ZIndex instead.
+		captionText = "Buy",
+	},
 
 	iconPosition = UDim2.new(0, 10, 0.5, 0),
 	iconSize = UDim2.new(0, 60, 0, 60),

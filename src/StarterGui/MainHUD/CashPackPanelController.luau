@@ -12,6 +12,7 @@ local player = Players.LocalPlayer
 local CashPackConfig = require(ReplicatedStorage:WaitForChild("CashPackConfig"))
 local ButtonHoverEffect = require(ReplicatedStorage:WaitForChild("ButtonHoverEffect"))
 local Theme = require(ReplicatedStorage:WaitForChild("UITheme"))
+local UISurface = require(ReplicatedStorage:WaitForChild("UISurface"))
 
 local function createPackRow(item, layoutOrder, itemList)
 	local T = Theme.cashPackRow
@@ -127,6 +128,28 @@ local function createPackRow(item, layoutOrder, itemList)
 	buyGradient.Rotation = T.buyGradientRotation
 	buyGradient.Color = T.buyGradient
 	buyGradient.Parent = buyButton
+
+	-- Themes that define buySurface replace the plain gradient above with a
+	-- gradient + tiled pattern, and move the caption into a child label. The
+	-- UICorner and UIGradient already created are updated in place, not
+	-- duplicated. Production leaves buySurface nil and keeps its "BUY" text.
+	if T.buySurface then
+		UISurface.applyTexturedSurface(buyButton, T.buySurface)
+		buyButton.Text = ""
+
+		local caption = Instance.new("TextLabel")
+		caption.Name = "Caption"
+		caption.Size = UDim2.fromScale(1, 1)
+		caption.BackgroundTransparency = 1
+		caption.Text = T.buySurface.captionText
+		caption.Font = T.buyFont
+		caption.TextSize = T.buyTextSize
+		caption.TextColor3 = T.buyTextColor
+		caption.TextStrokeColor3 = T.buyStrokeColor
+		caption.TextStrokeTransparency = T.buyStrokeTransparency
+		caption.ZIndex = 2
+		caption.Parent = buyButton
+	end
 
 	buyButton.MouseButton1Click:Connect(function()
 		if not item.productId or item.productId == 0 then

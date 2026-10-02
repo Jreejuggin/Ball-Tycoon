@@ -14,6 +14,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Theme = require(ReplicatedStorage:WaitForChild("UITheme"))
+local UISurface = require(ReplicatedStorage:WaitForChild("UISurface"))
 
 local MainHUDBuilder = {}
 
@@ -122,7 +123,17 @@ local function itemList(parent, topOffset, scrollBarColor)
 		ScrollingDirection = Enum.ScrollingDirection.Y,
 	}, parent)
 	listLayout(Theme.itemList.rowSpacing, list)
-	padding(0, 0, 0, Theme.itemList.paddingRight, list)
+	-- Rows draw their UIStroke outside their own bounds, and this frame clips.
+	-- Without a little padding the left edge of every row's outline (and the
+	-- top of the first row) gets shaved off. Themes that omit these keep the
+	-- original flush-left behaviour.
+	padding(
+		Theme.itemList.paddingTop or 0,
+		Theme.itemList.paddingBottom or 0,
+		Theme.itemList.paddingLeft or 0,
+		Theme.itemList.paddingRight,
+		list
+	)
 	return list
 end
 
@@ -560,6 +571,12 @@ local function buildCashPackPanel(gui)
 		BorderSizePixel = 0,
 	}, panel)
 
+	-- Only the themes that define a surface get one; the production theme
+	-- leaves this nil and the bar stays flat and transparent.
+	if T.titleBarSurface then
+		UISurface.applyTexturedSurface(bar, T.titleBarSurface)
+	end
+
 	local badge = new("Frame", {
 		Name = "TitleBadge",
 		Size = T.badgeSize,
@@ -605,6 +622,25 @@ local function buildCashPackPanel(gui)
 		TextStrokeTransparency = T.closeStrokeTransparency,
 	}, bar)
 	corner(T.closeCorner, close)
+
+	-- Same pattern treatment as the TitleBar and the Buy buttons. The caption
+	-- moves into a child so the PatternLayer cannot cover it -- a child always
+	-- renders above its parent, so the button's own Text would be hidden.
+	if T.closeSurface then
+		UISurface.applyTexturedSurface(close, T.closeSurface)
+		close.Text = ""
+		new("TextLabel", {
+			Name = "Caption",
+			Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1,
+			Text = T.closeSurface.captionText,
+			TextColor3 = T.closeTextColor,
+			Font = T.closeFont,
+			TextSize = T.closeTextSize,
+			TextStrokeTransparency = T.closeStrokeTransparency,
+			ZIndex = 2,
+		}, close)
+	end
 
 	local list = itemList(panel, T.listTopOffset, T.scrollBarColor)
 
