@@ -418,9 +418,10 @@ local function wirePlot(plot: Instance): boolean
 		end
 
 		collision.Transparency = 1
-		collision.CanCollide = purchased
+		-- The collision proxy follows the visible preview as well as the purchased station.
+		collision.CanCollide = workerPurchased
 		collision.CanTouch = false
-		collision.CanQuery = purchased
+		collision.CanQuery = workerPurchased
 		collision.CastShadow = false
 
 		station:SetAttribute("Unlocked", workerPurchased)

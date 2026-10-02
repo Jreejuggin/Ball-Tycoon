@@ -1,5 +1,7 @@
 --!strict
--- Owner-only local preview for Speed Upgrade Treadmills on P1-P10.
+-- Owner-only local preview for unpurchased Speed Upgrade Treadmills on P1-P10.
+-- The ghost appears as soon as a player owns a plot; the server keeps the real
+-- purchase pad locked until Centre03_Avatar is activated.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -29,19 +31,12 @@ local function findVisibleSlot()
 		local ownerId = plot and tonumber(plot:GetAttribute("Owner"))
 		local centreSlots = plot and plot:FindFirstChild("CentreSlots")
 		local avatarCentre = centreSlots and centreSlots:FindFirstChild("Centre03_Avatar")
-		local avatarActivated = avatarCentre and avatarCentre:FindFirstChild("Activated")
-		local avatarStatus = avatarCentre and avatarCentre:FindFirstChild("Status")
 		local upgrades = avatarCentre and avatarCentre:FindFirstChild("Upgrades")
 		local slot = upgrades and upgrades:FindFirstChild("SpeedUpgradeTreadmill")
 		local activated = slot and slot:FindFirstChild("Activated")
-		local centrePreviewAllowed = avatarActivated
-			and avatarActivated:IsA("BoolValue")
-			and avatarStatus
-			and avatarStatus:IsA("StringValue")
-			and (avatarActivated.Value or avatarStatus.Value == "Available")
 
 		if plot
-			and centrePreviewAllowed
+			and avatarCentre
 			and slot
 			and activated
 			and activated:IsA("BoolValue")
