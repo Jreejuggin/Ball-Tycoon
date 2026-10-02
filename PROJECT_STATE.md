@@ -18,9 +18,9 @@ game/
 │   ├── Baseplate, SpawnLocation, Terrain, Camera, SurfaceGui
 │   ├── Hub (Part)
 │   ├── MiddleShops/ (Folder)
-│   │   └── 5 shop structures + NPCs, each with a Body/InteractPrompt (ProximityPrompt):
-│   │       BallShopStructure, CreatureShopStructure, TradingPostStructure,
-│   │       VaultStructure, UpgradeShopStructure
+│   │   └── 4 shop structures + NPCs, each with a Body/InteractPrompt (ProximityPrompt):
+│   │       BallShopStructure, CreatureShopStructure, GearShopStructure,
+│   │       BankStructure (no panel yet — see section 2.4b)
 │   ├── P1–P10 (10 Plot Models, identical structure)
 │   │   ├── Floor, PerimeterWall (Model)
 │   │   ├── HiringKiosk (tagged ThemedModel; 13 themed parts + 4 collision boxes)
@@ -48,7 +48,8 @@ game/
 │   │            ShopRowBuilder, CashFormat, Tooltip
 │   ├── Shop item configs (Robux): ShopConfig, CashPackConfig
 │   ├── Shop item configs (in-game Cash, MiddleShops): CreatureShopConfig,
-│   │            BallShopConfig, TradingPostConfig, VaultConfig, UpgradeShopConfig
+│   │            BallShopConfig, GearShopConfig; plus dormant TradingPostConfig,
+│   │            VaultConfig, UpgradeShopConfig (see section 2.4b)
 │   ├── Other modules: PurchaseEffectModule, PurchaseSoundModule,
 │   │            MachineUpgradeConfig, PlotThemeConfig, PlotTheme,
 │   │            WorkerSpeedConfig
@@ -83,7 +84,7 @@ game/
 │   ├── MachineUpgradeFeedbackService
 │   ├── MachineSectionCompletionSoundService
 │   ├── MiddleShopPurchaseHandler — server-authoritative Cash purchases for
-│   │   the 5 MiddleShops NPCs (see section 2.4b)
+│   │   the MiddleShops NPCs (see section 2.4b)
 │   ├── DropperBuyPadNameGuard
 │   ├── CentreZoneService
 │   ├── PlotThemeService
@@ -102,7 +103,7 @@ game/
 │   ├── StatsHUD (ScreenGui) + StatsHUDUpdater (LocalScript)
 │   ├── MainHUD (ScreenGui)
 │   │   ├── MainHUDController (LocalScript) — main orchestrator
-│   │   ├── MiddleShopsController (LocalScript) — builds/wires the 5 MiddleShops panels
+│   │   ├── MiddleShopsController (LocalScript) — builds/wires the MiddleShops panels
 │   │   ├── Tooltip (TextLabel) — single shared hover-tooltip element, see section 2.8
 │   │   ├── CashHUDGroup (Frame) — groups CashPanel (+ PlusButton),
 │   │   │   TeleportToTycoonButton (square icon button, house icon), SettingsButton
@@ -115,9 +116,9 @@ game/
 │   │   ├── CashPackPanel + CashPackPanelController — Cash purchase packs
 │   │   │   (CashPackConfig, Robux), custom row styling (not ShopRowBuilder)
 │   │   ├── PetsPanel — placeholder (still "Soon" pills, not functional)
-│   │   ├── CreatureShopPanel, BallShopPanel, TradingPostPanel, VaultPanel,
-│   │   │   UpgradeShopPanel — the 5 MiddleShops panels, same visual chrome
-│   │   │   as ShopPanel, rows built via shared ShopRowBuilder
+│   │   ├── CreatureShopPanel, BallShopPanel, GearShopPanel — the MiddleShops
+│   │   │   panels, near-identical chrome to ShopPanel (see section 2.4b for
+│   │   │   where they differ), rows built via shared ShopRowBuilder
 │   │   ├── RichestBanner, HealthBar
 │   ├── TutorialGui (ScreenGui, ResetOnSpawn=false) — the first-time
 │   │   tutorial's client UI; separate from MainHUD so it survives respawn
@@ -248,15 +249,42 @@ game/
 
 ### 2.4b MiddleShops NPC Shop System (Server-Authoritative Cash Purchases)
 
-Five NPC shops in Workspace.MiddleShops (Creature, Ball, Trading Post, Vault,
-Upgrade), each with a ProximityPrompt that opens a matching UI panel. Fully
-functional end-to-end (built + verified in a live playtest, including
-insufficient-funds and invalid-item/invalid-shop rejection paths).
+NPC shops in Workspace.MiddleShops, each with a ProximityPrompt that opens a
+matching UI panel. Fully functional end-to-end (built + verified in a live
+playtest, including insufficient-funds and invalid-item/invalid-shop
+rejection paths).
+
+**Current shop lineup (reduced from the original five):** Creature Shop,
+Gear Shop, Ball Shop, and the Bank. Trading Post, Vault and Upgrade Shop were
+cut -- their structures are gone from Workspace.MiddleShops and their entries
+removed from SHOP_DEFINITIONS.
+
+**Deliberately kept for a possible future re-add:** TradingPostConfig,
+VaultConfig and UpgradeShopConfig still exist in ReplicatedStorage and are
+still listed in MiddleShopPurchaseHandler's ALLOWED_CONFIG_NAMES. They are
+unreachable from the client (no panel, no prompt, no SHOP_DEFINITIONS entry),
+so this is dormant rather than broken. To bring one of those shops back:
+re-add its structure to Workspace.MiddleShops, add a panel in MainHUDBuilder,
+and add one SHOP_DEFINITIONS entry. Delete all three if the shops are gone
+for good.
+
+**Not yet built:** the Bank has a BankStructure in Workspace.MiddleShops but
+no panel and no SHOP_DEFINITIONS entry. It is expected to look different from
+the other shop panels, so it was left for a later pass.
+
+**GearShopConfig is placeholder content** (Grip Gloves / Speed Boots / Magnet
+Glove / Power Gauntlet, 900-18000 Cash) -- invented to match the other shop
+configs' shape, not designed. Swap in real gear before shipping.
 
 **Client (StarterGui.MainHUD.MiddleShopsController):**
 - Loops over a SHOP_DEFINITIONS table (panel name, config module name,
-  ProximityPrompt path, action/object text) -- adding a 6th shop is one
-  table entry plus a matching panel and config module, no other code changes
+  ProximityPrompt path, action/object text) -- adding a shop is one table
+  entry plus a matching panel and config module, no other code changes
+- CAUTION: that loop resolves both the panel and the config with a
+  no-timeout WaitForChild. An entry naming a panel or config that does not
+  exist stalls the loop forever and silently leaves every later shop in the
+  table unwired (the ProximityPrompt path, by contrast, has a 5s timeout and
+  only warns). Always add the panel and config before the table entry.
 - For each shop: builds its item rows via the shared ShopRowBuilder, sets the
   ProximityPrompt's ActionText/ObjectText, registers the panel with
   PanelManager, and wires Triggered -> PanelManager.open(panel)
@@ -294,11 +322,12 @@ insufficient-funds and invalid-item/invalid-shop rejection paths).
   Cash-based flow). This is the mechanism that keeps Robux and Cash shops
   sharing the same UI code without duplicating it.
 - **CashFormat** (ReplicatedStorage) — comma-formats Cash amounts for display,
-  e.g. 50000 -> "$50,000". Used by all 5 MiddleShops config modules.
+  e.g. 50000 -> "$50,000". Used by every MiddleShops config module.
 
 **Item prices are all placeholders and will change once the economy is
-tuned** -- CreatureShopConfig/BallShopConfig/TradingPostConfig/VaultConfig/
-UpgradeShopConfig all have a `cost` (in-game Cash) field per item with
+tuned** -- CreatureShopConfig/BallShopConfig/GearShopConfig (and the dormant
+TradingPostConfig/VaultConfig/UpgradeShopConfig) all have a `cost` (in-game
+Cash) field per item with
 reasonable-but-arbitrary placeholder values; update those numbers directly
 in each config, no other code changes needed.
 
@@ -343,9 +372,61 @@ in each config, no other code changes needed.
 - CashPackPanel + CashPackPanelController: Cash purchase packs
   (CashPackConfig, Robux), custom row styling with a "50% OFF!" badge
 - PetsPanel: placeholder with "Soon" pills — still not functional
-- CreatureShopPanel / BallShopPanel / TradingPostPanel / VaultPanel /
-  UpgradeShopPanel: the 5 MiddleShops panels — see section 2.4b
+- CreatureShopPanel / BallShopPanel / GearShopPanel: the MiddleShops panels
+  — see section 2.4b
 - RichestBanner, HealthBar
+
+**MainHUD is now built in code, not hand-placed.** `src/StarterGui/MainHUD/`
+is a directory, not an .rbxm: an init.meta.json defining the ScreenGui, a
+MainHUDBuilder ModuleScript that constructs the whole tree with Instance.new,
+and the four controllers as loose .luau files (ShopPanelController and
+CashPackPanelController are ModuleScripts taking the panel to populate, since
+their panels no longer exist at sync time -- MainHUDController calls both).
+
+Confirmed working in Studio, and every component is verified
+property-by-property against the original hand-placed layout via rbxmk. To
+re-check after editing the builder, build the tree in-process with
+`rbxmk.loadFile` and diff it against
+src/StarterGui/MainHUD_VisualReference.rbxm (see below); the one property that
+cannot be verified this way is FontFace, since rbxmk silently drops FontFace
+when it reads an .rbxm -- never round-trip either .rbxm in this section
+through rbxmk, only read from it.
+
+**`src/StarterGui/MainHUD_VisualReference.rbxm` is the original hand-placed
+UI, kept on purpose as a Studio-only visual reference.** MainHUDBuilder has no
+visual editor -- to preview or tweak a size/position/color by eye rather than
+by reasoning about numbers, open this instead. It syncs into StarterGui as
+`MainHUD_VisualReference` (a ScreenGui, `Enabled = false`, both LocalScripts
+inside it `Disabled = true`), so Studio's edit-mode viewport still renders it
+for inspection, but it never appears at runtime and never executes a
+controller. It is NOT kept in sync with MainHUDCode changes going forward --
+edit it in Studio if you want an updated reference, or delete it if it's no
+longer useful.
+
+To change it: edit live in Studio (drag/resize/whatever), then right-click the
+top-level `MainHUD_VisualReference` instance -> **Save to File** -> overwrite
+this same path. That round-trip goes through Studio's own serializer, not
+rbxmk, so fonts are safe. Do not rename the live instance back to `MainHUD` --
+that's the name the real, code-driven ScreenGui (`src/StarterGui/MainHUD/`)
+needs for `ReplicatedStorage.Tooltip`'s `PlayerGui:WaitForChild("MainHUD")`
+lookup to keep working, and Roblox allows two siblings with the same name
+without erroring, which just means whichever the client finds first wins.
+
+GOTCHA if you're re-adding an exclusion or otherwise editing
+`globIgnorePaths`: `rojo serve` loads `default.project.json` once at startup
+and does not appear to hot-reload changes to the project file's own
+structure. If a change like this doesn't seem to take effect in Studio after
+reconnecting, restart the `rojo serve` process itself, not just the Studio
+plugin connection.
+
+Two things to keep in mind when editing this UI:
+- `ReplicatedStorage.Tooltip` resolves its label via
+  `PlayerGui:WaitForChild("MainHUD")` by name, so the ScreenGui must keep the
+  name MainHUD -- i.e. do not rename that directory.
+- Fonts are the one property rbxmk cannot read out of an .rbxm (it silently
+  drops FontFace), so the builder's Font values came from a written spec and
+  are the one thing unverified against the original. Never round-trip an
+  .rbxm through rbxmk -- it would wipe every font in the file.
 
 **StatsHUD** (StarterGui.StatsHUD):
 - StatsHUDUpdater (LocalScript)
@@ -360,11 +441,10 @@ in each config, no other code changes needed.
 **UI Effects & Shared Modules:**
 - **ButtonHoverEffect** (ReplicatedStorage): scale + lift tween on hover,
   shared hover/click sounds (Sound instances created once in SoundService,
-  reused). hoverSoundId/clickSoundId in UISoundConfig are currently EMPTY
-  placeholders -- verified that Roblox's built-in rbxasset:// sound paths
-  don't resolve in this project, so a real uploaded/Marketplace sound ID is
-  needed before any sound actually plays. Hover animation itself works
-  regardless.
+  reused). hoverSoundId and clickSoundId in UISoundConfig now hold real
+  uploaded asset IDs, so both sounds do play -- the file's comment block still
+  describes them as empty placeholders and is out of date. Hover animation
+  works independently of the sounds either way.
 - **Tooltip** (ReplicatedStorage): `Tooltip.attach(button, text, options?)`.
   Uses ONE reusable label (StarterGui.MainHUD.Tooltip, AutomaticSize.X,
   ZIndex 100) instead of creating an instance per button. Shows on
@@ -467,8 +547,9 @@ in each config, no other code changes needed.
 - Both need real Developer Product IDs from Creator Dashboard before they can sell anything -- Buy currently warns instead of prompting.
 
 **In-game Cash (functional, MiddleShops):**
-- CreatureShopConfig, BallShopConfig, TradingPostConfig, VaultConfig,
-  UpgradeShopConfig -- each item has a real `cost` in Cash, deducted
+- CreatureShopConfig, BallShopConfig, GearShopConfig, and the dormant
+  TradingPostConfig/VaultConfig/UpgradeShopConfig -- each item has a real
+  `cost` in Cash, deducted
   server-side on purchase. This system works end-to-end today. Prices are
   placeholder values and will be retuned once the economy is balanced.
 
@@ -673,7 +754,7 @@ whole DataStore entry, which resets Cash/plot color/tutorial progress too).
 8. **UI styling system:** StyleSheet + BaseStyleSheet in ReplicatedStorage.Design exist for consistent theming, but MainHUD doesn't use them yet (hardcoded per-instance styling instead).
 9. **Worker AI via Humanoid:MoveTo():** Simple pathfinding to nearest cash ball. Stuck detection with position reset.
 10. **Player-owned plot themes:** Cosmetic accent membership is persistent CollectionService metadata; clients request a color, while the server resolves ownership, applies it, and saves it per player.
-11. **Shared, pluggable shop UI:** ShopRowBuilder builds every shop-style panel's rows (main Shop, all 5 MiddleShops) from the same code, with the purchase flow (Robux vs in-game Cash) swapped via an optional callback rather than duplicated per shop. PanelManager gives every panel the same single-panel-exclusive open/close behavior without each script needing its own copy of that logic.
+11. **Shared, pluggable shop UI:** ShopRowBuilder builds every shop-style panel's rows (main Shop, every MiddleShops panel) from the same code, with the purchase flow (Robux vs in-game Cash) swapped via an optional callback rather than duplicated per shop. PanelManager gives every panel the same single-panel-exclusive open/close behavior without each script needing its own copy of that logic.
 12. **Config-driven shop content:** Every shop's items live in a small ReplicatedStorage ModuleScript (id/name/cost-or-productId/icon). Adding an item is a table edit; adding a whole new NPC shop is one config module + one panel + one entry in MiddleShopsController's SHOP_DEFINITIONS.
 13. **Config-driven onboarding:** The first-time tutorial's step list is one ReplicatedStorage ModuleScript (TutorialConfig), and each step describes its target and its completion condition as a `{root, path}` spec resolved at runtime rather than as a hardcoded Instance reference. Both the client state machine and the server's persistence drive themselves off that one list, so adding, reordering, or removing a step is a table edit. Same shape as the shop configs (decision 12).
 14. **Tutorial state resolved from a tri-state DataStore result:** GetAsync collapses "brand-new player" and "load failed" into the same empty result, so TutorialProgressService takes the success flag separately and resolves failure FIRST, always to "already completed". A failed load must never look like a new player, or returning players replay onboarding over their real save. See section 2.12.
@@ -738,7 +819,7 @@ What's NOT yet built:
 ## 6. Next Steps (Suggested)
 
 1. **Manually verify tooltips in Studio** — confirm positioning/offset/timing feels right for all 5 CashHUDGroup buttons (couldn't be verified live by tooling, only structurally)
-2. **MiddleShops economy tuning** — replace placeholder Cash costs in the 5 shop configs once the tycoon economy is balanced
+2. **MiddleShops economy tuning** — replace placeholder Cash costs in the shop configs once the tycoon economy is balanced (GearShopConfig's items are placeholders too, not just its prices)
 3. **MiddleShops persistence** — save Backpack items / PurchasedItems counters in DataSaveScript so purchases survive rejoining
 4. **Real MiddleShops assets** — replace the shared CreatureBall_Slimey placeholder with distinct per-tier creature models, and add real items for Ball/TradingPost/Vault/UpgradeShop
 5. **Configure Robux products** — replace placeholder productIds in ShopConfig and CashPackConfig with real Roblox product IDs, implement ProcessReceipt handler
@@ -763,7 +844,7 @@ What's NOT yet built:
 - **Plot models** P1–P10 are identical in structure. Changes to plot structure should be applied to all 10.
 - **Dependency attribute** on slots controls unlock order — modifying this chain affects gameplay flow.
 - **CorePackages is empty** — there is no AppMusicPlayer package despite earlier references. The only music system is the third-party MusicGUI.
-- **Adding a new MiddleShops-style shop:** create a ReplicatedStorage config ModuleScript (see CreatureShopConfig for the shape), clone one of the 5 existing panel Frames' chrome, add one entry to MiddleShopsController's SHOP_DEFINITIONS table. No changes needed to ShopRowBuilder, PanelManager, or MiddleShopPurchaseHandler unless the new shop needs a different purchase flow (e.g. Robux instead of Cash) or its own item-granting logic (add another `if configName == "..."` branch in MiddleShopPurchaseHandler, following the Creature Shop example).
+- **Adding a new MiddleShops-style shop:** create a ReplicatedStorage config ModuleScript (see CreatureShopConfig for the shape), add a panel via MainHUDBuilder's buildMiddleShopPanel helper, add one entry to MiddleShopsController's SHOP_DEFINITIONS table (panel and config must exist first — see the caution in section 2.4b). No changes needed to ShopRowBuilder, PanelManager, or MiddleShopPurchaseHandler unless the new shop needs a different purchase flow (e.g. Robux instead of Cash) or its own item-granting logic (add another `if configName == "..."` branch in MiddleShopPurchaseHandler, following the Creature Shop example).
 - **Testing Cash-balance-dependent logic:** this economy's passive income is fast (tens of thousands/sec on active accounts). Don't set Cash low from a client script and wait before checking -- that write doesn't even replicate to the server's authoritative value. Use eval_server_runtime with a zero-yield check for real insufficient-funds testing.
 - **Adding hover tooltips to a new button:** `require(ReplicatedStorage.Tooltip).attach(button, "Label Text")` -- that's it, no per-button UI to build.
 - **Fixing a transparent-PNG-that-isn't-actually-transparent icon:** check alpha channel mode first (PIL: `img.mode`). If it's RGB with no alpha, don't assume a simple color threshold will work -- check whether the icon's own fill color is close to the background color first (sample a few pixels). If they're close, use the texture-variance-per-connected-region method described in section 2.8's Icon Assets note, not a plain threshold.
