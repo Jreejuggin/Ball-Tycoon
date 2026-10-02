@@ -4,8 +4,16 @@
 -- reproduced from that binary exactly; see Milestone notes where the written
 -- spec and the binary disagreed.
 --
+-- Every colour, size, font and radius now comes from ReplicatedStorage.UITheme.
+-- Instance names and hierarchy stay fixed here, because the controllers find
+-- their elements by name and path.
+--
 -- Call build(gui) before any controller logic reads these instances --
 -- MainHUDController dot-indexes several of them, so they must exist first.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Theme = require(ReplicatedStorage:WaitForChild("UITheme"))
 
 local MainHUDBuilder = {}
 
@@ -48,12 +56,11 @@ local function listLayout(paddingPx, parent)
 	}, parent)
 end
 
-local STROKE_GREY = Color3.fromRGB(84, 89, 102)
-local PANEL_STROKE = Color3.fromRGB(92, 97, 107)
-local PANEL_DARK = Color3.fromRGB(28, 31, 36)
-local BUTTON_DARK = Color3.fromRGB(41, 43, 48)
-local CLOSE_RED = Color3.fromRGB(217, 77, 77)
-local WHITE = Color3.fromRGB(255, 255, 255)
+-- Applies the shared panel look. Callers that differ from it (CashPackPanel,
+-- and MiddleShops' background) set their own values instead.
+local function panelStroke(parent)
+	return stroke(Theme.panel.strokeThickness, Theme.panel.strokeTransparency, Theme.panel.strokeColor, parent)
+end
 
 -- The standard panel header: a transparent bar holding a left-aligned title
 -- and a square close button. The MainHUD panels and the MiddleShops panels
@@ -62,7 +69,7 @@ local WHITE = Color3.fromRGB(255, 255, 255)
 local function titleBar(parent, titleText, closeRadius, barLayoutOrder, titleBorderSizePixel)
 	local bar = new("Frame", {
 		Name = "TitleBar",
-		Size = UDim2.new(1, 0, 0, 36),
+		Size = UDim2.new(1, 0, 0, Theme.titleBar.height),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		LayoutOrder = barLayoutOrder,
@@ -70,28 +77,28 @@ local function titleBar(parent, titleText, closeRadius, barLayoutOrder, titleBor
 
 	new("TextLabel", {
 		Name = "TitleLabel",
-		Size = UDim2.new(1, -36, 1, 0),
+		Size = Theme.titleBar.titleSize,
 		BackgroundTransparency = 1,
 		BorderSizePixel = titleBorderSizePixel,
 		Text = titleText,
-		TextColor3 = WHITE,
-		Font = Enum.Font.GothamBlack,
-		TextSize = 22,
+		TextColor3 = Theme.titleBar.titleColor,
+		Font = Theme.titleBar.titleFont,
+		TextSize = Theme.titleBar.titleTextSize,
 		TextXAlignment = Enum.TextXAlignment.Left,
-		TextStrokeTransparency = 0,
+		TextStrokeTransparency = Theme.titleBar.titleStrokeTransparency,
 	}, bar)
 
 	local close = new("TextButton", {
 		Name = "CloseButton",
-		Size = UDim2.new(0, 32, 0, 32),
-		Position = UDim2.new(1, -32, 0, 2),
-		BackgroundColor3 = CLOSE_RED,
+		Size = Theme.titleBar.closeSize,
+		Position = Theme.titleBar.closePosition,
+		BackgroundColor3 = Theme.titleBar.closeColor,
 		BorderSizePixel = 0,
 		Text = "X",
-		TextColor3 = WHITE,
-		Font = Enum.Font.GothamBlack,
-		TextSize = 18,
-		TextStrokeTransparency = 0,
+		TextColor3 = Theme.titleBar.closeTextColor,
+		Font = Theme.titleBar.closeFont,
+		TextSize = Theme.titleBar.closeTextSize,
+		TextStrokeTransparency = Theme.titleBar.closeStrokeTransparency,
 	}, bar)
 	corner(closeRadius, close)
 
@@ -110,20 +117,22 @@ local function itemList(parent, topOffset, scrollBarColor)
 		ZIndex = 2,
 		ClipsDescendants = true,
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
-		ScrollBarThickness = 6,
+		ScrollBarThickness = Theme.itemList.scrollBarThickness,
 		ScrollBarImageColor3 = scrollBarColor,
 		ScrollingDirection = Enum.ScrollingDirection.Y,
 	}, parent)
-	listLayout(10, list)
-	padding(0, 0, 0, 10, list)
+	listLayout(Theme.itemList.rowSpacing, list)
+	padding(0, 0, 0, Theme.itemList.paddingRight, list)
 	return list
 end
 
 local function buildCashHUDGroup(gui)
+	local T = Theme.cashHud
+
 	local group = new("Frame", {
 		Name = "CashHUDGroup",
-		Size = UDim2.new(0, 190, 0, 160),
-		Position = UDim2.new(-0.013, 20, 0.513, -148),
+		Size = T.groupSize,
+		Position = T.groupPosition,
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		ZIndex = 1,
@@ -131,157 +140,159 @@ local function buildCashHUDGroup(gui)
 
 	local cashPanel = new("Frame", {
 		Name = "CashPanel",
-		Size = UDim2.new(0, 190, 0, 52),
-		Position = UDim2.new(0, 0, 0, 56),
-		BackgroundColor3 = PANEL_DARK,
+		Size = T.cashPanelSize,
+		Position = T.cashPanelPosition,
+		BackgroundColor3 = T.cashPanelBackground,
 		BorderSizePixel = 0,
 		ZIndex = 2,
 	}, group)
-	corner(16, cashPanel)
-	stroke(2, 0.25, STROKE_GREY, cashPanel)
-	padding(8, 8, 8, 8, cashPanel)
+	corner(T.cashPanelCorner, cashPanel)
+	stroke(T.cashPanelStrokeThickness, T.cashPanelStrokeTransparency, T.cashPanelStrokeColor, cashPanel)
+	padding(T.cashPanelPadding, T.cashPanelPadding, T.cashPanelPadding, T.cashPanelPadding, cashPanel)
 
 	new("TextLabel", {
 		Name = "CashLabel",
-		Size = UDim2.new(0, 92, 0, 36),
-		Position = UDim2.new(-0.2744101583957672, 52, 0.5, 0),
+		Size = T.cashLabelSize,
+		Position = T.cashLabelPosition,
 		AnchorPoint = Vector2.new(0, 0.5),
 		BackgroundTransparency = 1,
 		LayoutOrder = 2,
 		Text = "$0",
-		TextColor3 = Color3.fromRGB(107, 242, 140),
-		Font = Enum.Font.GothamBlack,
-		TextSize = 24,
+		TextColor3 = T.cashLabelColor,
+		Font = T.cashLabelFont,
+		TextSize = T.cashLabelTextSize,
 		TextXAlignment = Enum.TextXAlignment.Left,
-		TextStrokeTransparency = 0,
+		TextStrokeTransparency = T.cashLabelStrokeTransparency,
 	}, cashPanel)
 
 	local plusButton = new("TextButton", {
 		Name = "PlusButton",
-		Size = UDim2.new(0, 32, 0, 32),
-		Position = UDim2.new(1, -8, 0.5, 0),
+		Size = T.plusSize,
+		Position = T.plusPosition,
 		AnchorPoint = Vector2.new(1, 0.5),
-		BackgroundColor3 = Color3.fromRGB(71, 199, 107),
+		BackgroundColor3 = T.plusColor,
 		BorderSizePixel = 0,
 		LayoutOrder = 3,
 		Text = "+",
-		TextColor3 = WHITE,
-		Font = Enum.Font.GothamBlack,
-		TextSize = 22,
-		TextStrokeTransparency = 0,
+		TextColor3 = T.plusTextColor,
+		Font = T.plusFont,
+		TextSize = T.plusTextSize,
+		TextStrokeTransparency = T.plusStrokeTransparency,
 	}, cashPanel)
-	corner(8, plusButton)
+	corner(T.plusCorner, plusButton)
 
 	-- TextSize/TextStroke/RichText below have no visible effect while Text is
 	-- empty, but are reproduced so the instance matches the binary exactly.
 	local teleportButton = new("TextButton", {
 		Name = "TeleportToTycoonButton",
-		Size = UDim2.new(0, 44, 0, 44),
-		Position = UDim2.new(0.15263158082962036, 0, 0.01875000074505806, 0),
+		Size = T.teleportSize,
+		Position = T.teleportPosition,
 		AnchorPoint = Vector2.new(0.5, 0),
-		BackgroundColor3 = Color3.fromRGB(76, 155, 86),
+		BackgroundColor3 = T.teleportColor,
 		BorderSizePixel = 0,
 		ZIndex = 3,
 		Text = "",
-		TextColor3 = WHITE,
-		Font = Enum.Font.GothamBlack,
-		TextSize = 17,
-		TextStrokeTransparency = 0.44999998807907104,
+		TextColor3 = T.teleportTextColor,
+		Font = T.teleportFont,
+		TextSize = T.teleportTextSize,
+		TextStrokeTransparency = T.teleportStrokeTextTransparency,
 		TextWrapped = true,
 		RichText = true,
 	}, group)
-	corner(8, teleportButton)
-	stroke(2, 0, Color3.fromRGB(181, 255, 144), teleportButton, "AccentStroke")
+	corner(T.teleportCorner, teleportButton)
+	stroke(T.teleportStrokeThickness, T.teleportStrokeTransparency, T.teleportStrokeColor, teleportButton, "AccentStroke")
 
 	-- Spec described this as "0.475 -> 1 (blue -> green-ish)" with six
 	-- transparency keypoints. The binary has two green keypoints and a fully
 	-- opaque transparency sequence; 0.475 was the first colour's red channel.
 	new("UIGradient", {
-		Rotation = 90,
-		Color = ColorSequence.new(Color3.fromRGB(121, 226, 127), Color3.fromRGB(50, 132, 65)),
+		Rotation = T.teleportGradientRotation,
+		Color = T.teleportGradient,
 	}, teleportButton)
 
 	new("ImageLabel", {
 		Size = UDim2.new(1, 0, 1, 0),
 		BackgroundTransparency = 1,
-		Image = "rbxassetid://79152891526373",
+		Image = Theme.asset.teleportIcon,
 		ScaleType = Enum.ScaleType.Fit,
 	}, teleportButton)
 
 	local settingsButton = new("TextButton", {
 		Name = "SettingsButton",
-		Size = UDim2.new(0, 58, 0, 44),
-		Position = UDim2.new(0, 0, 0, 116),
-		BackgroundColor3 = BUTTON_DARK,
+		Size = T.settingsSize,
+		Position = T.settingsPosition,
+		BackgroundColor3 = T.settingsColor,
 		BorderSizePixel = 0,
 		ZIndex = 2,
 		Text = "⚙",
-		TextColor3 = WHITE,
-		Font = Enum.Font.GothamBlack,
-		TextSize = 30,
-		TextStrokeTransparency = 0,
+		TextColor3 = T.settingsTextColor,
+		Font = T.settingsFont,
+		TextSize = T.settingsTextSize,
+		TextStrokeTransparency = T.settingsStrokeTextTransparency,
 		TextWrapped = true,
 	}, group)
-	corner(12, settingsButton)
-	stroke(2, 0.25, STROKE_GREY, settingsButton)
+	corner(T.settingsCorner, settingsButton)
+	stroke(T.settingsStrokeThickness, T.settingsStrokeTransparency, T.settingsStrokeColor, settingsButton)
 	-- Second UICorner is a leftover from an earlier fix; kept so the tree
 	-- matches the binary. Roblox applies only one, so it has no visual effect.
-	corner(8, settingsButton)
+	corner(T.settingsCornerDuplicate, settingsButton)
 
 	new("ImageLabel", {
-		Size = UDim2.new(0, 58, 0, 44),
-		BackgroundColor3 = WHITE,
+		Size = T.settingsIconSize,
+		BackgroundColor3 = Theme.color.white,
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		Image = "rbxassetid://86564279252401",
+		Image = Theme.asset.settingsIcon,
 		ScaleType = Enum.ScaleType.Stretch,
 	}, settingsButton)
 
 	local function quickActionButton(name, xOffset, text)
 		local button = new("TextButton", {
 			Name = name,
-			Size = UDim2.new(0, 58, 0, 44),
-			Position = UDim2.new(0, xOffset, 0, 116),
-			BackgroundColor3 = BUTTON_DARK,
+			Size = T.quickSize,
+			Position = UDim2.new(0, xOffset, 0, T.quickY),
+			BackgroundColor3 = T.quickColor,
 			BorderSizePixel = 0,
 			ZIndex = 2,
 			Text = text,
-			TextColor3 = WHITE,
-			Font = Enum.Font.GothamBlack,
-			TextSize = 8,
+			TextColor3 = T.quickTextColor,
+			Font = T.quickFont,
+			TextSize = T.quickTextSize,
 			TextScaled = true,
-			TextStrokeTransparency = 0,
+			TextStrokeTransparency = T.quickStrokeTextTransparency,
 			TextWrapped = true,
 		}, group)
-		corner(8, button)
-		stroke(2, 0.25, STROKE_GREY, button)
+		corner(T.quickCorner, button)
+		stroke(T.quickStrokeThickness, T.quickStrokeTransparency, T.quickStrokeColor, button)
 		padding(0, 0, 0, 0, button)
 		return button
 	end
 
-	quickActionButton("ShopButton", 66, "Shop")
-	quickActionButton("PetsButton", 132, "Pets")
+	quickActionButton("ShopButton", T.quickShopX, "Shop")
+	quickActionButton("PetsButton", T.quickPetsX, "Pets")
 
 	return group
 end
 
 local function buildSettingsPanel(gui)
+	local T = Theme.settings
+
 	local panel = new("Frame", {
 		Name = "SettingsPanel",
-		Size = UDim2.new(0, 300, 0, 210),
-		Position = UDim2.new(0.5, 0, 0.5, 0),
+		Size = T.size,
+		Position = T.position,
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		BackgroundColor3 = PANEL_DARK,
+		BackgroundColor3 = Theme.panel.background,
 		BorderSizePixel = 0,
 		ZIndex = 10,
 		Visible = false,
 	}, gui)
-	corner(20, panel)
-	stroke(2, 0.15000000596046448, PANEL_STROKE, panel)
-	padding(14, 14, 14, 14, panel)
-	listLayout(10, panel)
+	corner(Theme.panel.cornerRadius, panel)
+	panelStroke(panel)
+	padding(T.padding, T.padding, T.padding, T.padding, panel)
+	listLayout(T.rowSpacing, panel)
 
-	titleBar(panel, "Settings", 10, 1, 0)
+	titleBar(panel, "Settings", T.closeCorner, 1, 0)
 
 	-- MusicRow keeps BorderSizePixel at its default of 1 while SFXRow sets 0.
 	-- Invisible either way (the rows are transparent), but reproduced as-is.
@@ -293,7 +304,7 @@ local function buildSettingsPanel(gui)
 	local function toggleRow(name, labelText, layoutOrder, borderSizePixel)
 		local row = new("Frame", {
 			Name = name,
-			Size = UDim2.new(1, 0, 0, 44),
+			Size = UDim2.new(1, 0, 0, T.rowHeight),
 			BackgroundTransparency = 1,
 			BorderSizePixel = borderSizePixel,
 			LayoutOrder = layoutOrder,
@@ -301,36 +312,36 @@ local function buildSettingsPanel(gui)
 
 		new("TextLabel", {
 			Name = "Label",
-			Size = UDim2.new(0, 150, 1, 0),
+			Size = T.labelSize,
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
 			Text = labelText,
-			TextColor3 = WHITE,
-			Font = Enum.Font.GothamBold,
-			TextSize = 18,
+			TextColor3 = T.labelColor,
+			Font = T.labelFont,
+			TextSize = T.labelTextSize,
 			TextXAlignment = Enum.TextXAlignment.Left,
-			TextStrokeTransparency = 0.4000000059604645,
+			TextStrokeTransparency = T.labelStrokeTransparency,
 		}, row)
 
 		local toggle = new("TextButton", {
 			Name = "ToggleButton",
-			Size = UDim2.new(0, 60, 0, 30),
-			Position = UDim2.new(1, -60, 0.5, -15),
-			BackgroundColor3 = Color3.fromRGB(71, 199, 107),
+			Size = Theme.toggle.trackSize,
+			Position = Theme.toggle.trackPosition,
+			BackgroundColor3 = Theme.toggle.trackOnColor,
 			BorderSizePixel = 0,
 			Text = "",
 		}, row)
-		corner(15, toggle)
+		corner(Theme.toggle.trackCorner, toggle)
 
 		local knob = new("Frame", {
 			Name = "Knob",
-			Size = UDim2.new(0, 24, 0, 24),
-			Position = UDim2.new(1, -27, 0.5, 0),
+			Size = Theme.toggle.knobSize,
+			Position = Theme.toggle.knobOnPosition,
 			AnchorPoint = Vector2.new(0, 0.5),
-			BackgroundColor3 = WHITE,
+			BackgroundColor3 = Theme.toggle.knobColor,
 			BorderSizePixel = 0,
 		}, toggle)
-		new("UICorner", { CornerRadius = UDim.new(0.5, 0) }, knob)
+		new("UICorner", { CornerRadius = Theme.toggle.knobCorner }, knob)
 
 		return row
 	end
@@ -342,19 +353,21 @@ local function buildSettingsPanel(gui)
 end
 
 local function buildRichestBanner(gui)
+	local T = Theme.richestBanner
+
 	local banner = new("Frame", {
 		Name = "RichestBanner",
-		Size = UDim2.new(0, 0, 0, 40),
-		Position = UDim2.new(0.5, 0, -0.08698859065771103, 12),
+		Size = T.size,
+		Position = T.position,
 		AnchorPoint = Vector2.new(0.5, 0),
-		BackgroundColor3 = Color3.fromRGB(28, 30, 34),
+		BackgroundColor3 = T.background,
 		BorderSizePixel = 0,
 		ZIndex = 5,
 		AutomaticSize = Enum.AutomaticSize.X,
 	}, gui)
-	corner(20, banner)
-	stroke(2, 0.10000000149011612, Color3.fromRGB(255, 200, 60), banner)
-	padding(0, 0, 18, 18, banner)
+	corner(T.cornerRadius, banner)
+	stroke(T.strokeThickness, T.strokeTransparency, T.strokeColor, banner)
+	padding(0, 0, T.paddingX, T.paddingX, banner)
 
 	new("TextLabel", {
 		Name = "RichestLabel",
@@ -362,39 +375,41 @@ local function buildRichestBanner(gui)
 		BackgroundTransparency = 1,
 		AutomaticSize = Enum.AutomaticSize.X,
 		Text = "★ Richest: --- ($0)",
-		TextColor3 = Color3.fromRGB(255, 205, 70),
-		Font = Enum.Font.GothamBlack,
-		TextSize = 20,
-		TextStrokeTransparency = 0,
+		TextColor3 = T.labelColor,
+		Font = T.labelFont,
+		TextSize = T.labelTextSize,
+		TextStrokeTransparency = T.labelStrokeTransparency,
 	}, banner)
 
 	return banner
 end
 
 local function buildHealthBar(gui)
+	local T = Theme.healthBar
+
 	local bar = new("Frame", {
 		Name = "HealthBar",
-		Size = UDim2.new(0, 220, 0, 36),
-		Position = UDim2.new(0, 2, 1, -2),
+		Size = T.size,
+		Position = T.position,
 		AnchorPoint = Vector2.new(0, 1),
-		BackgroundColor3 = Color3.fromRGB(15, 15, 15),
+		BackgroundColor3 = T.background,
 		BorderSizePixel = 0,
 		ClipsDescendants = true,
 	}, gui)
-	corner(18, bar)
-	stroke(3, 0, Color3.fromRGB(10, 10, 10), bar)
+	corner(T.cornerRadius, bar)
+	stroke(T.strokeThickness, T.strokeTransparency, T.strokeColor, bar)
 
 	local fill = new("Frame", {
 		Name = "FillBar",
 		Size = UDim2.new(1, 0, 1, 0),
-		BackgroundColor3 = Color3.fromRGB(90, 200, 90),
+		BackgroundColor3 = T.fillColor,
 		BorderSizePixel = 0,
 	}, bar)
 	new("UIGradient", {
-		Rotation = 90,
-		Color = ColorSequence.new(Color3.fromRGB(140, 230, 120), Color3.fromRGB(60, 170, 70)),
+		Rotation = T.fillGradientRotation,
+		Color = T.fillGradient,
 	}, fill)
-	corner(18, fill)
+	corner(T.fillCorner, fill)
 
 	new("TextLabel", {
 		Name = "HealthLabel",
@@ -402,61 +417,65 @@ local function buildHealthBar(gui)
 		BackgroundTransparency = 1,
 		ZIndex = 2,
 		Text = "100/100",
-		TextColor3 = WHITE,
-		Font = Enum.Font.GothamBold,
-		TextSize = 20,
-		TextStrokeTransparency = 0,
+		TextColor3 = T.labelColor,
+		Font = T.labelFont,
+		TextSize = T.labelTextSize,
+		TextStrokeTransparency = T.labelStrokeTransparency,
 	}, bar)
 
 	return bar
 end
 
 local function buildShopPanel(gui)
+	local T = Theme.shopPanel
+
 	local panel = new("Frame", {
 		Name = "ShopPanel",
-		Size = UDim2.new(0, 380, 0, 420),
-		Position = UDim2.new(0.5, 0, 0.5, 0),
+		Size = T.size,
+		Position = T.position,
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		BackgroundColor3 = PANEL_DARK,
+		BackgroundColor3 = Theme.panel.background,
 		BorderSizePixel = 0,
 		ZIndex = 10,
 		Visible = false,
 	}, gui)
-	corner(20, panel)
-	stroke(2, 0.15000000596046448, PANEL_STROKE, panel)
-	padding(0, 0, 0, 0, panel)
+	corner(Theme.panel.cornerRadius, panel)
+	panelStroke(panel)
+	padding(T.padding, T.padding, T.padding, T.padding, panel)
 
 	-- Spec said this CloseButton matches SettingsPanel's (radius 10). It is
 	-- actually 8, as is PetsPanel's; the MiddleShops panels do use 10.
-	titleBar(panel, "Shop", 8, 1, 0)
-	itemList(panel, 46, Color3.fromRGB(210, 165, 60))
+	titleBar(panel, "Shop", T.closeCorner, 1, 0)
+	itemList(panel, T.listTopOffset, T.scrollBarColor)
 
 	return panel
 end
 
 local function buildPetsPanel(gui)
+	local T = Theme.petsPanel
+
 	local panel = new("Frame", {
 		Name = "PetsPanel",
-		Size = UDim2.new(0, 320, 0, 260),
-		Position = UDim2.new(0.5, 0, 0.5, 0),
+		Size = T.size,
+		Position = T.position,
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		BackgroundColor3 = PANEL_DARK,
+		BackgroundColor3 = Theme.panel.background,
 		BorderSizePixel = 0,
 		ZIndex = 10,
 		Visible = false,
 	}, gui)
-	corner(20, panel)
-	stroke(2, 0.15000000596046448, PANEL_STROKE, panel)
-	padding(0, 0, 0, 0, panel)
-	listLayout(0, panel)
+	corner(Theme.panel.cornerRadius, panel)
+	panelStroke(panel)
+	padding(T.padding, T.padding, T.padding, T.padding, panel)
+	listLayout(T.rowSpacing, panel)
 
 	-- See buildShopPanel: radius 8, not the 10 the spec described.
-	titleBar(panel, "Pets", 8, 1, 0)
+	titleBar(panel, "Pets", T.closeCorner, 1, 0)
 
 	local function placeholderRow(name, labelText, layoutOrder)
 		local row = new("Frame", {
 			Name = name,
-			Size = UDim2.new(1, 0, 0, 44),
+			Size = UDim2.new(1, 0, 0, T.rowHeight),
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
 			LayoutOrder = layoutOrder,
@@ -464,32 +483,32 @@ local function buildPetsPanel(gui)
 
 		new("TextLabel", {
 			Name = "Label",
-			Size = UDim2.new(0, 150, 1, 0),
+			Size = T.labelSize,
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
 			Text = labelText,
-			TextColor3 = WHITE,
-			Font = Enum.Font.GothamBold,
-			TextSize = 18,
+			TextColor3 = T.labelColor,
+			Font = T.labelFont,
+			TextSize = T.labelTextSize,
 			TextXAlignment = Enum.TextXAlignment.Left,
-			TextStrokeTransparency = 0.4000000059604645,
+			TextStrokeTransparency = T.labelStrokeTransparency,
 		}, row)
 
 		-- Spec recorded the pill background as unset/default; it is actually
 		-- this grey on all three rows.
 		local pill = new("TextLabel", {
 			Name = "SoonPill",
-			Size = UDim2.new(0, 70, 0, 28),
-			Position = UDim2.new(1, -70, 0.5, -14),
-			BackgroundColor3 = Color3.fromRGB(89, 92, 102),
+			Size = T.pillSize,
+			Position = T.pillPosition,
+			BackgroundColor3 = T.pillBackground,
 			BorderSizePixel = 0,
 			Text = "Soon",
-			TextColor3 = WHITE,
-			Font = Enum.Font.GothamBold,
-			TextSize = 14,
-			TextStrokeTransparency = 0,
+			TextColor3 = T.pillTextColor,
+			Font = T.pillFont,
+			TextSize = T.pillTextSize,
+			TextStrokeTransparency = T.pillStrokeTransparency,
 		}, row)
-		corner(8, pill)
+		corner(T.pillCorner, pill)
 
 		return row
 	end
@@ -502,76 +521,78 @@ local function buildPetsPanel(gui)
 end
 
 local function buildCashPackPanel(gui)
+	local T = Theme.cashPackPanel
+
 	local panel = new("Frame", {
 		Name = "CashPackPanel",
-		Size = UDim2.new(0, 380, 0, 420),
-		Position = UDim2.new(0.5, 0, 0.5, 0),
+		Size = T.size,
+		Position = T.position,
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		BackgroundColor3 = Color3.fromRGB(10, 10, 10),
+		BackgroundColor3 = T.background,
 		BorderSizePixel = 0,
 		ZIndex = 10,
 		Visible = false,
 	}, gui)
-	corner(20, panel)
-	stroke(3, 0, Color3.fromRGB(70, 200, 90), panel)
-	padding(14, 14, 14, 14, panel)
+	corner(T.cornerRadius, panel)
+	stroke(T.strokeThickness, T.strokeTransparency, T.strokeColor, panel)
+	padding(T.padding, T.padding, T.padding, T.padding, panel)
 
 	-- Taller header than the shared titleBar, with a circular "$" badge, so
 	-- this one is built out rather than reusing that helper.
 	local bar = new("Frame", {
 		Name = "TitleBar",
-		Size = UDim2.new(1, 0, 0, 44),
+		Size = UDim2.new(1, 0, 0, T.titleBarHeight),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 	}, panel)
 
 	local badge = new("Frame", {
 		Name = "TitleBadge",
-		Size = UDim2.new(0, 40, 0, 40),
-		Position = UDim2.new(0, 0, 0.5, 0),
+		Size = T.badgeSize,
+		Position = T.badgePosition,
 		AnchorPoint = Vector2.new(0, 0.5),
-		BackgroundColor3 = WHITE,
+		BackgroundColor3 = T.badgeBackground,
 		BorderSizePixel = 0,
 	}, bar)
-	new("UICorner", { CornerRadius = UDim.new(0.5, 0) }, badge)
+	new("UICorner", { CornerRadius = T.badgeCorner }, badge)
 	new("TextLabel", {
 		Size = UDim2.new(1, 0, 1, 0),
 		BackgroundTransparency = 1,
 		Text = "$",
-		TextColor3 = Color3.fromRGB(20, 20, 20),
-		Font = Enum.Font.GothamBlack,
-		TextSize = 22,
+		TextColor3 = T.badgeTextColor,
+		Font = T.badgeFont,
+		TextSize = T.badgeTextSize,
 	}, badge)
 
 	new("TextLabel", {
 		Name = "TitleLabel",
-		Size = UDim2.new(1, -94, 1, 0),
-		Position = UDim2.new(0, 50, 0, 0),
+		Size = T.titleSize,
+		Position = T.titlePosition,
 		BackgroundTransparency = 1,
 		Text = "Cash",
-		TextColor3 = WHITE,
-		Font = Enum.Font.GothamBlack,
-		TextSize = 26,
+		TextColor3 = T.titleColor,
+		Font = T.titleFont,
+		TextSize = T.titleTextSize,
 		TextXAlignment = Enum.TextXAlignment.Left,
-		TextStrokeTransparency = 0,
+		TextStrokeTransparency = T.titleStrokeTransparency,
 	}, bar)
 
 	local close = new("TextButton", {
 		Name = "CloseButton",
-		Size = UDim2.new(0, 40, 0, 40),
-		Position = UDim2.new(1, 0, 0.5, 0),
+		Size = T.closeSize,
+		Position = T.closePosition,
 		AnchorPoint = Vector2.new(1, 0.5),
-		BackgroundColor3 = Color3.fromRGB(220, 60, 60),
+		BackgroundColor3 = T.closeColor,
 		BorderSizePixel = 0,
 		Text = "X",
-		TextColor3 = WHITE,
-		Font = Enum.Font.GothamBlack,
-		TextSize = 20,
-		TextStrokeTransparency = 0,
+		TextColor3 = T.closeTextColor,
+		Font = T.closeFont,
+		TextSize = T.closeTextSize,
+		TextStrokeTransparency = T.closeStrokeTransparency,
 	}, bar)
-	corner(10, close)
+	corner(T.closeCorner, close)
 
-	itemList(panel, 54, Color3.fromRGB(80, 210, 100))
+	itemList(panel, T.listTopOffset, T.scrollBarColor)
 
 	return panel
 end
@@ -580,21 +601,23 @@ end
 -- mirroring ShopPanel, they differ: a slightly different background, no
 -- UIPadding, and a radius-10 close button where ShopPanel's is 8.
 local function buildMiddleShopPanel(gui, name, titleText)
+	local T = Theme.middleShopPanel
+
 	local panel = new("Frame", {
 		Name = name,
-		Size = UDim2.new(0, 380, 0, 420),
-		Position = UDim2.new(0.5, 0, 0.5, 0),
+		Size = T.size,
+		Position = T.position,
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		BackgroundColor3 = Color3.fromRGB(28, 30, 34),
+		BackgroundColor3 = T.background,
 		BorderSizePixel = 0,
 		ZIndex = 10,
 		Visible = false,
 	}, gui)
-	corner(20, panel)
-	stroke(2, 0.15000000596046448, PANEL_STROKE, panel)
+	corner(Theme.panel.cornerRadius, panel)
+	panelStroke(panel)
 
-	titleBar(panel, titleText, 10, 0, 1)
-	itemList(panel, 46, Color3.fromRGB(210, 165, 60))
+	titleBar(panel, titleText, T.closeCorner, 0, 1)
+	itemList(panel, T.listTopOffset, T.scrollBarColor)
 
 	return panel
 end
@@ -602,22 +625,24 @@ end
 -- One shared label reused for every hover tooltip, positioned and filled in at
 -- runtime by ReplicatedStorage.Tooltip. Text is left at the TextLabel default.
 local function buildTooltip(gui)
+	local T = Theme.tooltip
+
 	local tooltip = new("TextLabel", {
 		Name = "Tooltip",
-		Size = UDim2.new(0, 0, 0, 28),
+		Size = T.size,
 		AnchorPoint = Vector2.new(0, 1),
-		BackgroundColor3 = Color3.fromRGB(20, 20, 22),
+		BackgroundColor3 = T.background,
 		BorderSizePixel = 0,
 		ZIndex = 100,
 		Visible = false,
 		AutomaticSize = Enum.AutomaticSize.X,
-		TextColor3 = WHITE,
-		Font = Enum.Font.GothamBold,
-		TextSize = 14,
+		TextColor3 = T.textColor,
+		Font = T.font,
+		TextSize = T.textSize,
 	}, gui)
-	padding(0, 0, 10, 10, tooltip)
-	corner(6, tooltip)
-	stroke(1, 0.30000001192092896, Color3.fromRGB(90, 92, 98), tooltip)
+	padding(0, 0, T.paddingX, T.paddingX, tooltip)
+	corner(T.cornerRadius, tooltip)
+	stroke(T.strokeThickness, T.strokeTransparency, T.strokeColor, tooltip)
 
 	return tooltip
 end

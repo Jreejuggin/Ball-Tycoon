@@ -11,50 +11,51 @@ local player = Players.LocalPlayer
 
 local CashPackConfig = require(ReplicatedStorage:WaitForChild("CashPackConfig"))
 local ButtonHoverEffect = require(ReplicatedStorage:WaitForChild("ButtonHoverEffect"))
-
-local ROW_HEIGHT = 84
+local Theme = require(ReplicatedStorage:WaitForChild("UITheme"))
 
 local function createPackRow(item, layoutOrder, itemList)
+	local T = Theme.cashPackRow
+
 	local row = Instance.new("Frame")
 	row.Name = item.id .. "Row"
 	row.LayoutOrder = layoutOrder
-	row.Size = UDim2.new(1, 0, 0, ROW_HEIGHT)
-	row.BackgroundColor3 = Color3.fromRGB(18, 22, 18)
+	row.Size = UDim2.new(1, 0, 0, T.height)
+	row.BackgroundColor3 = T.background
 	row.BorderSizePixel = 0
 	row.Parent = itemList
 
 	local rowCorner = Instance.new("UICorner")
-	rowCorner.CornerRadius = UDim.new(0, 14)
+	rowCorner.CornerRadius = UDim.new(0, T.cornerRadius)
 	rowCorner.Parent = row
 
 	local rowStroke = Instance.new("UIStroke")
-	rowStroke.Color = Color3.fromRGB(70, 200, 90)
-	rowStroke.Thickness = 1.5
-	rowStroke.Transparency = 0.2
+	rowStroke.Color = T.strokeColor
+	rowStroke.Thickness = T.strokeThickness
+	rowStroke.Transparency = T.strokeTransparency
 	rowStroke.Parent = row
 
 	-- Icon badge (pack size abbreviation, e.g. "5K", "1M")
 	local icon = Instance.new("Frame")
 	icon.Name = "Icon"
 	icon.AnchorPoint = Vector2.new(0, 0.5)
-	icon.Position = UDim2.new(0, 10, 0.5, 0)
-	icon.Size = UDim2.new(0, 60, 0, 60)
+	icon.Position = T.iconPosition
+	icon.Size = T.iconSize
 	icon.BackgroundColor3 = item.iconColor
 	icon.BorderSizePixel = 0
 	icon.Parent = row
 
 	local iconCorner = Instance.new("UICorner")
-	iconCorner.CornerRadius = UDim.new(0.5, 0)
+	iconCorner.CornerRadius = T.iconCorner
 	iconCorner.Parent = icon
 
 	local iconLabel = Instance.new("TextLabel")
 	iconLabel.BackgroundTransparency = 1
 	iconLabel.Size = UDim2.new(1, 0, 1, 0)
-	iconLabel.Font = Enum.Font.GothamBlack
-	iconLabel.TextSize = 16
-	iconLabel.TextColor3 = Color3.new(1, 1, 1)
-	iconLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
-	iconLabel.TextStrokeTransparency = 0
+	iconLabel.Font = T.iconFont
+	iconLabel.TextSize = T.iconTextSize
+	iconLabel.TextColor3 = T.iconTextColor
+	iconLabel.TextStrokeColor3 = T.iconStrokeColor
+	iconLabel.TextStrokeTransparency = T.iconStrokeTransparency
 	iconLabel.Text = item.iconText
 	iconLabel.Parent = icon
 
@@ -62,13 +63,13 @@ local function createPackRow(item, layoutOrder, itemList)
 	local nameLabel = Instance.new("TextLabel")
 	nameLabel.Name = "NameLabel"
 	nameLabel.BackgroundTransparency = 1
-	nameLabel.Position = UDim2.new(0, 84, 0, 10)
-	nameLabel.Size = UDim2.new(0, 150, 0, 24)
-	nameLabel.Font = Enum.Font.GothamBlack
-	nameLabel.TextSize = 18
-	nameLabel.TextColor3 = Color3.fromRGB(90, 220, 110)
-	nameLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
-	nameLabel.TextStrokeTransparency = 0
+	nameLabel.Position = T.namePosition
+	nameLabel.Size = T.nameSize
+	nameLabel.Font = T.nameFont
+	nameLabel.TextSize = T.nameTextSize
+	nameLabel.TextColor3 = T.nameColor
+	nameLabel.TextStrokeColor3 = T.nameStrokeColor
+	nameLabel.TextStrokeTransparency = T.nameStrokeTransparency
 	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
 	nameLabel.Text = item.name
 	nameLabel.Parent = row
@@ -77,12 +78,12 @@ local function createPackRow(item, layoutOrder, itemList)
 	local priceLabel = Instance.new("TextLabel")
 	priceLabel.Name = "PriceLabel"
 	priceLabel.BackgroundTransparency = 1
-	priceLabel.Position = UDim2.new(0, 84, 0, 38)
-	priceLabel.Size = UDim2.new(0, 150, 0, 22)
-	priceLabel.Font = Enum.Font.GothamBold
-	priceLabel.TextSize = 16
-	priceLabel.TextColor3 = Color3.new(1, 1, 1)
-	priceLabel.TextStrokeTransparency = 0.4
+	priceLabel.Position = T.pricePosition
+	priceLabel.Size = T.priceSize
+	priceLabel.Font = T.priceFont
+	priceLabel.TextSize = T.priceTextSize
+	priceLabel.TextColor3 = T.priceColor
+	priceLabel.TextStrokeTransparency = T.priceStrokeTransparency
 	priceLabel.TextXAlignment = Enum.TextXAlignment.Left
 	priceLabel.Text = item.priceText
 	priceLabel.Parent = row
@@ -91,14 +92,14 @@ local function createPackRow(item, layoutOrder, itemList)
 	local discountLabel = Instance.new("TextLabel")
 	discountLabel.Name = "DiscountLabel"
 	discountLabel.AnchorPoint = Vector2.new(1, 0)
-	discountLabel.Position = UDim2.new(1, -10, 0, 8)
-	discountLabel.Size = UDim2.new(0, 90, 0, 16)
+	discountLabel.Position = T.discountPosition
+	discountLabel.Size = T.discountSize
 	discountLabel.BackgroundTransparency = 1
-	discountLabel.Font = Enum.Font.GothamBlack
-	discountLabel.TextSize = 13
-	discountLabel.TextColor3 = Color3.fromRGB(255, 170, 40)
-	discountLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
-	discountLabel.TextStrokeTransparency = 0.3
+	discountLabel.Font = T.discountFont
+	discountLabel.TextSize = T.discountTextSize
+	discountLabel.TextColor3 = T.discountColor
+	discountLabel.TextStrokeColor3 = T.discountStrokeColor
+	discountLabel.TextStrokeTransparency = T.discountStrokeTransparency
 	discountLabel.Text = "50% OFF!"
 	discountLabel.Parent = row
 
@@ -106,28 +107,25 @@ local function createPackRow(item, layoutOrder, itemList)
 	local buyButton = Instance.new("TextButton")
 	buyButton.Name = "BuyButton"
 	buyButton.AnchorPoint = Vector2.new(1, 1)
-	buyButton.Position = UDim2.new(1, -10, 1, -12)
-	buyButton.Size = UDim2.new(0, 90, 0, 40)
-	buyButton.BackgroundColor3 = Color3.fromRGB(70, 190, 80)
+	buyButton.Position = T.buyPosition
+	buyButton.Size = T.buySize
+	buyButton.BackgroundColor3 = T.buyColor
 	buyButton.BorderSizePixel = 0
-	buyButton.Font = Enum.Font.GothamBlack
-	buyButton.TextSize = 18
-	buyButton.TextColor3 = Color3.new(1, 1, 1)
-	buyButton.TextStrokeColor3 = Color3.new(0, 0, 0)
-	buyButton.TextStrokeTransparency = 0
+	buyButton.Font = T.buyFont
+	buyButton.TextSize = T.buyTextSize
+	buyButton.TextColor3 = T.buyTextColor
+	buyButton.TextStrokeColor3 = T.buyStrokeColor
+	buyButton.TextStrokeTransparency = T.buyStrokeTransparency
 	buyButton.Text = "BUY"
 	buyButton.Parent = row
 
 	local buyCorner = Instance.new("UICorner")
-	buyCorner.CornerRadius = UDim.new(0, 10)
+	buyCorner.CornerRadius = UDim.new(0, T.buyCorner)
 	buyCorner.Parent = buyButton
 
 	local buyGradient = Instance.new("UIGradient")
-	buyGradient.Rotation = 90
-	buyGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(140, 230, 130)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(50, 160, 60)),
-	})
+	buyGradient.Rotation = T.buyGradientRotation
+	buyGradient.Color = T.buyGradient
 	buyGradient.Parent = buyButton
 
 	buyButton.MouseButton1Click:Connect(function()
@@ -141,7 +139,7 @@ local function createPackRow(item, layoutOrder, itemList)
 		MarketplaceService:PromptProductPurchase(player, item.productId)
 	end)
 
-	ButtonHoverEffect.apply(buyButton, { scale = 1.1, lift = 3 })
+	ButtonHoverEffect.apply(buyButton, Theme.hover.buyButton)
 
 	return row
 end

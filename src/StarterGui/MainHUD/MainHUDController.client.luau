@@ -8,6 +8,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ButtonHoverEffect = require(ReplicatedStorage:WaitForChild("ButtonHoverEffect"))
 local Tooltip = require(ReplicatedStorage:WaitForChild("Tooltip"))
 local SFXSettings = require(ReplicatedStorage:WaitForChild("SFXSettings"))
+local Theme = require(ReplicatedStorage:WaitForChild("UITheme"))
 
 -- The MusicGUI loader supplies these client-side modules at runtime. Using its
 -- shared handler ensures the MainHUD and MusicPlaylistGUI control the same song.
@@ -138,10 +139,14 @@ cashPackCloseButton.MouseButton1Click:Connect(closeAllPanels)
 -- Each ToggleButton is a pill-shaped track with a circular Knob child (see
 -- MainHUDBuilder) that slides between the two ends, iOS-switch style.
 local TOGGLE_TWEEN_INFO = TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-local TOGGLE_ON_COLOR = Color3.fromRGB(72, 199, 107)
-local TOGGLE_OFF_COLOR = Color3.fromRGB(90, 92, 98)
-local TOGGLE_KNOB_ON_POSITION = UDim2.new(1, -27, 0.5, 0)
-local TOGGLE_KNOB_OFF_POSITION = UDim2.new(0, 3, 0.5, 0)
+-- trackOnColorLegacy, not trackOnColor: this script's "on" green has always
+-- been one step redder than the one MainHUDBuilder paints the track with, so
+-- the switch shifted by 1/255 the first time it was toggled. Kept distinct to
+-- preserve the current look exactly; see the note in UITheme.
+local TOGGLE_ON_COLOR = Theme.toggle.trackOnColorLegacy
+local TOGGLE_OFF_COLOR = Theme.toggle.trackOffColor
+local TOGGLE_KNOB_ON_POSITION = Theme.toggle.knobOnPosition
+local TOGGLE_KNOB_OFF_POSITION = Theme.toggle.knobOffPosition
 
 local function setToggleAppearance(button, isOn)
 	local knob = button:WaitForChild("Knob")
