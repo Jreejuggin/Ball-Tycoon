@@ -21,43 +21,41 @@ local onMusicMuteChanged = ReplicatedStorage:WaitForChild("Events")
 local player = game.Players.LocalPlayer
 local gui = script.Parent
 
--- The HUD tree is constructed in code rather than hand-placed in Studio, so it
--- must be built before the lookups below -- several of them dot-index the panel
--- instances and would error if they did not exist yet.
+-- The HUD tree is constructed in code rather than hand-placed in Studio.
+-- build() returns named references to every element this script drives, so
+-- nothing below depends on instance names, nesting or paths -- the layout can
+-- be rearranged freely inside MainHUDBuilder without touching this file.
 local MainHUDBuilder = require(script.Parent:WaitForChild("MainHUDBuilder"))
-MainHUDBuilder.build(gui)
+local refs = MainHUDBuilder.build(gui)
 
--- Cash, travel, and quick-action buttons live in one container so their
--- spacing remains fixed relative to the cash panel at every screen size.
-local cashHUDGroup = gui:WaitForChild("CashHUDGroup")
-local cashPanel = cashHUDGroup:WaitForChild("CashPanel")
-local cashLabel = cashPanel.CashLabel
-local plusButton = cashPanel.PlusButton
-local teleportToTycoonButton = cashHUDGroup:WaitForChild("TeleportToTycoonButton")
+local cashLabel = refs.cashLabel
+local plusButton = refs.plusButton
+local teleportToTycoonButton = refs.teleportButton
 local teleportToTycoonEvent = ReplicatedStorage:WaitForChild("TeleportToTycoonEvent")
 
-local settingsButton = cashHUDGroup:WaitForChild("SettingsButton")
-local settingsPanel = gui.SettingsPanel
-local settingsCloseButton = settingsPanel.TitleBar.CloseButton
-local musicToggle = settingsPanel.MusicRow.ToggleButton
-local sfxToggle = settingsPanel.SFXRow.ToggleButton
+local settingsButton = refs.settingsButton
+local settingsPanel = refs.settings.panel
+local settingsCloseButton = refs.settings.closeButton
+local musicToggle = refs.settings.music.track
+local musicKnob = refs.settings.music.knob
+local sfxToggle = refs.settings.sfx.track
+local sfxKnob = refs.settings.sfx.knob
 
-local shopButton = cashHUDGroup:WaitForChild("ShopButton")
-local shopPanel = gui.ShopPanel
-local shopCloseButton = shopPanel.TitleBar.CloseButton
+local shopButton = refs.shopButton
+local shopPanel = refs.shop.panel
+local shopCloseButton = refs.shop.closeButton
 
-local petsButton = cashHUDGroup:WaitForChild("PetsButton")
-local petsPanel = gui.PetsPanel
-local petsCloseButton = petsPanel.TitleBar.CloseButton
+local petsButton = refs.petsButton
+local petsPanel = refs.pets.panel
+local petsCloseButton = refs.pets.closeButton
 
-local cashPackPanel = gui.CashPackPanel
-local cashPackCloseButton = cashPackPanel.TitleBar.CloseButton
+local cashPackPanel = refs.cashPack.panel
+local cashPackCloseButton = refs.cashPack.closeButton
 
-local richestLabel = gui.RichestBanner.RichestLabel
+local richestLabel = refs.richestLabel
 
-local healthBar = gui.HealthBar
-local healthFillBar = healthBar.FillBar
-local healthLabel = healthBar.HealthLabel
+local healthFillBar = refs.healthBar.fill
+local healthLabel = refs.healthBar.label
 
 -- ===== Cash formatting =====
 -- Abbreviates large numbers (1,234,567 -> "1.23M") so the panel stays a
@@ -148,9 +146,8 @@ local TOGGLE_OFF_COLOR = Theme.toggle.trackOffColor
 local TOGGLE_KNOB_ON_POSITION = Theme.toggle.knobOnPosition
 local TOGGLE_KNOB_OFF_POSITION = Theme.toggle.knobOffPosition
 
-local function setToggleAppearance(button, isOn)
-	local knob = button:WaitForChild("Knob")
-	TweenService:Create(button, TOGGLE_TWEEN_INFO, {
+local function setToggleAppearance(track, knob, isOn)
+	TweenService:Create(track, TOGGLE_TWEEN_INFO, {
 		BackgroundColor3 = isOn and TOGGLE_ON_COLOR or TOGGLE_OFF_COLOR,
 	}):Play()
 	TweenService:Create(knob, TOGGLE_TWEEN_INFO, {
@@ -162,7 +159,7 @@ end
 -- changes that shared state, then emits its existing BindableEvent so the
 -- audio engine immediately applies the new volume.
 local function updateMusicToggle()
-	setToggleAppearance(musicToggle, not LocalMusicHandler.IsCurrentPlayingSongMuted())
+	setToggleAppearance(musicToggle, musicKnob, not LocalMusicHandler.IsCurrentPlayingSongMuted())
 end
 
 musicToggle.Activated:Connect(function()
@@ -178,7 +175,7 @@ updateMusicToggle()
 -- Every non-music effect is routed through SoundService.SFX. Its volume is
 -- changed locally, so this setting affects only the current player.
 local function updateSFXToggle()
-	setToggleAppearance(sfxToggle, not SFXSettings.IsMuted())
+	setToggleAppearance(sfxToggle, sfxKnob, not SFXSettings.IsMuted())
 end
 
 sfxToggle.Activated:Connect(function()
@@ -304,7 +301,7 @@ Tooltip.attach(petsButton, "Pets")
 -- ===== Panel row content =====
 -- Previously LocalScripts parented to their panels. The panels are now built
 -- at runtime, so each is a module that takes the panel it should populate.
-require(script.Parent:WaitForChild("ShopPanelController"))(shopPanel)
-require(script.Parent:WaitForChild("CashPackPanelController"))(cashPackPanel)
+require(script.Parent:WaitForChild("ShopPanelController"))(refs.shop.itemList)
+require(script.Parent:WaitForChild("CashPackPanelController"))(refs.cashPack.itemList)
 
 

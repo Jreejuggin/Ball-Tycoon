@@ -102,7 +102,7 @@ local function titleBar(parent, titleText, closeRadius, barLayoutOrder, titleBor
 	}, bar)
 	corner(closeRadius, close)
 
-	return bar
+	return bar, close
 end
 
 -- Scrolling row container. Left empty here: ShopPanelController, the
@@ -150,7 +150,7 @@ local function buildCashHUDGroup(gui)
 	stroke(T.cashPanelStrokeThickness, T.cashPanelStrokeTransparency, T.cashPanelStrokeColor, cashPanel)
 	padding(T.cashPanelPadding, T.cashPanelPadding, T.cashPanelPadding, T.cashPanelPadding, cashPanel)
 
-	new("TextLabel", {
+	local cashLabel = new("TextLabel", {
 		Name = "CashLabel",
 		Size = T.cashLabelSize,
 		Position = T.cashLabelPosition,
@@ -268,10 +268,19 @@ local function buildCashHUDGroup(gui)
 		return button
 	end
 
-	quickActionButton("ShopButton", T.quickShopX, "Shop")
-	quickActionButton("PetsButton", T.quickPetsX, "Pets")
+	local shopButton = quickActionButton("ShopButton", T.quickShopX, "Shop")
+	local petsButton = quickActionButton("PetsButton", T.quickPetsX, "Pets")
 
-	return group
+	return {
+		group = group,
+		cashPanel = cashPanel,
+		cashLabel = cashLabel,
+		plusButton = plusButton,
+		teleportButton = teleportButton,
+		settingsButton = settingsButton,
+		shopButton = shopButton,
+		petsButton = petsButton,
+	}
 end
 
 local function buildSettingsPanel(gui)
@@ -292,7 +301,7 @@ local function buildSettingsPanel(gui)
 	padding(T.padding, T.padding, T.padding, T.padding, panel)
 	listLayout(T.rowSpacing, panel)
 
-	titleBar(panel, "Settings", T.closeCorner, 1, 0)
+	local _, closeButton = titleBar(panel, "Settings", T.closeCorner, 1, 0)
 
 	-- MusicRow keeps BorderSizePixel at its default of 1 while SFXRow sets 0.
 	-- Invisible either way (the rows are transparent), but reproduced as-is.
@@ -343,13 +352,18 @@ local function buildSettingsPanel(gui)
 		}, toggle)
 		new("UICorner", { CornerRadius = Theme.toggle.knobCorner }, knob)
 
-		return row
+		return { row = row, track = toggle, knob = knob }
 	end
 
-	toggleRow("MusicRow", "Music", 2, 1)
-	toggleRow("SFXRow", "SFX", 3, 0)
+	local music = toggleRow("MusicRow", "Music", 2, 1)
+	local sfx = toggleRow("SFXRow", "SFX", 3, 0)
 
-	return panel
+	return {
+		panel = panel,
+		closeButton = closeButton,
+		music = music,
+		sfx = sfx,
+	}
 end
 
 local function buildRichestBanner(gui)
@@ -369,7 +383,7 @@ local function buildRichestBanner(gui)
 	stroke(T.strokeThickness, T.strokeTransparency, T.strokeColor, banner)
 	padding(0, 0, T.paddingX, T.paddingX, banner)
 
-	new("TextLabel", {
+	local label = new("TextLabel", {
 		Name = "RichestLabel",
 		Size = UDim2.new(0, 0, 1, 0),
 		BackgroundTransparency = 1,
@@ -381,7 +395,7 @@ local function buildRichestBanner(gui)
 		TextStrokeTransparency = T.labelStrokeTransparency,
 	}, banner)
 
-	return banner
+	return { banner = banner, label = label }
 end
 
 local function buildHealthBar(gui)
@@ -411,7 +425,7 @@ local function buildHealthBar(gui)
 	}, fill)
 	corner(T.fillCorner, fill)
 
-	new("TextLabel", {
+	local label = new("TextLabel", {
 		Name = "HealthLabel",
 		Size = UDim2.new(1, 0, 1, 0),
 		BackgroundTransparency = 1,
@@ -423,7 +437,7 @@ local function buildHealthBar(gui)
 		TextStrokeTransparency = T.labelStrokeTransparency,
 	}, bar)
 
-	return bar
+	return { bar = bar, fill = fill, label = label }
 end
 
 local function buildShopPanel(gui)
@@ -445,10 +459,10 @@ local function buildShopPanel(gui)
 
 	-- Spec said this CloseButton matches SettingsPanel's (radius 10). It is
 	-- actually 8, as is PetsPanel's; the MiddleShops panels do use 10.
-	titleBar(panel, "Shop", T.closeCorner, 1, 0)
-	itemList(panel, T.listTopOffset, T.scrollBarColor)
+	local _, closeButton = titleBar(panel, "Shop", T.closeCorner, 1, 0)
+	local list = itemList(panel, T.listTopOffset, T.scrollBarColor)
 
-	return panel
+	return { panel = panel, closeButton = closeButton, itemList = list }
 end
 
 local function buildPetsPanel(gui)
@@ -470,7 +484,7 @@ local function buildPetsPanel(gui)
 	listLayout(T.rowSpacing, panel)
 
 	-- See buildShopPanel: radius 8, not the 10 the spec described.
-	titleBar(panel, "Pets", T.closeCorner, 1, 0)
+	local _, closeButton = titleBar(panel, "Pets", T.closeCorner, 1, 0)
 
 	local function placeholderRow(name, labelText, layoutOrder)
 		local row = new("Frame", {
@@ -517,7 +531,7 @@ local function buildPetsPanel(gui)
 	placeholderRow("OwnedRow", "Owned", 3)
 	placeholderRow("InventoryRow", "Inventory", 4)
 
-	return panel
+	return { panel = panel, closeButton = closeButton }
 end
 
 local function buildCashPackPanel(gui)
@@ -592,9 +606,9 @@ local function buildCashPackPanel(gui)
 	}, bar)
 	corner(T.closeCorner, close)
 
-	itemList(panel, T.listTopOffset, T.scrollBarColor)
+	local list = itemList(panel, T.listTopOffset, T.scrollBarColor)
 
-	return panel
+	return { panel = panel, closeButton = close, itemList = list }
 end
 
 -- Shared chrome for the NPC shop panels. Despite the spec describing these as
@@ -616,10 +630,10 @@ local function buildMiddleShopPanel(gui, name, titleText)
 	corner(Theme.panel.cornerRadius, panel)
 	panelStroke(panel)
 
-	titleBar(panel, titleText, T.closeCorner, 0, 1)
-	itemList(panel, T.listTopOffset, T.scrollBarColor)
+	local _, closeButton = titleBar(panel, titleText, T.closeCorner, 0, 1)
+	local list = itemList(panel, T.listTopOffset, T.scrollBarColor)
 
-	return panel
+	return { panel = panel, closeButton = closeButton, itemList = list }
 end
 
 -- One shared label reused for every hover tooltip, positioned and filled in at
@@ -647,24 +661,71 @@ local function buildTooltip(gui)
 	return tooltip
 end
 
--- Built in the same order as the children of the hand-placed MainHUD, so the
--- two trees can be compared child-by-child.
+-- Only the shops that still exist in Workspace.MiddleShops. The former Trading
+-- Post, Vault and Upgrade Shop panels are deliberately not built.
+--
+-- `key` is what MiddleShopsController asks for, deliberately not the instance
+-- name: a redesign can rename or re-parent the panel and only this table
+-- changes.
+local MIDDLE_SHOPS = {
+	{ key = "creature", instanceName = "CreatureShopPanel", title = "Creature Shop" },
+	{ key = "ball", instanceName = "BallShopPanel", title = "Ball Shop" },
+	{ key = "gear", instanceName = "GearShopPanel", title = "Gear Shop" },
+}
+
+local builtRefs = nil
+
+-- Builds the tree and returns a table of named references to every element the
+-- controllers drive. They read those references instead of walking paths, so
+-- renaming, re-parenting or re-nesting anything in here cannot break them --
+-- only this file knows the layout.
+--
+-- Idempotent and safe to call from more than one script: MainHUDController and
+-- MiddleShopsController are sibling LocalScripts with no guaranteed start
+-- order, so whichever runs first builds and the other gets the cached refs.
+--
+-- Children are built in the same order as the hand-placed MainHUD, so the two
+-- trees can still be compared child-by-child.
 function MainHUDBuilder.build(gui)
-	buildSettingsPanel(gui)
-	buildRichestBanner(gui)
-	buildHealthBar(gui)
-	buildShopPanel(gui)
-	buildPetsPanel(gui)
-	buildCashPackPanel(gui)
-	buildCashHUDGroup(gui)
+	if builtRefs then
+		return builtRefs
+	end
 
-	-- Only the shops that still exist in Workspace.MiddleShops. The former
-	-- Trading Post, Vault and Upgrade Shop panels are deliberately not built.
-	buildMiddleShopPanel(gui, "CreatureShopPanel", "Creature Shop")
-	buildMiddleShopPanel(gui, "BallShopPanel", "Ball Shop")
-	buildMiddleShopPanel(gui, "GearShopPanel", "Gear Shop")
+	local settings = buildSettingsPanel(gui)
+	local richest = buildRichestBanner(gui)
+	local health = buildHealthBar(gui)
+	local shop = buildShopPanel(gui)
+	local pets = buildPetsPanel(gui)
+	local cashPack = buildCashPackPanel(gui)
+	local cashHud = buildCashHUDGroup(gui)
 
-	buildTooltip(gui)
+	local middleShops = {}
+	for _, definition in ipairs(MIDDLE_SHOPS) do
+		middleShops[definition.key] = buildMiddleShopPanel(gui, definition.instanceName, definition.title)
+	end
+
+	local tooltip = buildTooltip(gui)
+
+	builtRefs = {
+		cashLabel = cashHud.cashLabel,
+		plusButton = cashHud.plusButton,
+		teleportButton = cashHud.teleportButton,
+		settingsButton = cashHud.settingsButton,
+		shopButton = cashHud.shopButton,
+		petsButton = cashHud.petsButton,
+
+		settings = settings,
+		shop = shop,
+		pets = pets,
+		cashPack = cashPack,
+		middleShops = middleShops,
+
+		richestLabel = richest.label,
+		healthBar = health,
+		tooltip = tooltip,
+	}
+
+	return builtRefs
 end
 
 return MainHUDBuilder
