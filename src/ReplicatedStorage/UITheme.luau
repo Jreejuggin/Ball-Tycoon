@@ -8,8 +8,8 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local ACTIVE_THEME = "UITheme_Production"
--- local ACTIVE_THEME = "UITheme_Prototype"
+-- local ACTIVE_THEME = "UITheme_Production"
+local ACTIVE_THEME = "UITheme_Prototype"
 
 -- This module holds no values of its own. Every consumer requires UITheme and
 -- gets whichever table ACTIVE_THEME names, so one edit here restyles the whole
