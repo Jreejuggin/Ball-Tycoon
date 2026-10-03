@@ -139,7 +139,9 @@ local function createPackRow(item, layoutOrder, itemList)
 
 		local caption = Instance.new("TextLabel")
 		caption.Name = "Caption"
-		caption.Size = UDim2.fromScale(1, 1)
+		-- Short by the surface's extruded lip, so "Buy" centres on the lit face
+		-- instead of on the whole slab and sitting half the lip too low.
+		caption.Size = UDim2.new(1, 0, 1, -(T.buySurface.depth or 0))
 		caption.BackgroundTransparency = 1
 		caption.Text = T.buySurface.captionText
 		caption.Font = T.buyFont

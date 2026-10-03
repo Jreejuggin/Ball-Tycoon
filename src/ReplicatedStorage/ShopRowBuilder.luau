@@ -22,6 +22,7 @@ local Players = game:GetService("Players")
 
 local ButtonHoverEffect = require(ReplicatedStorage:WaitForChild("ButtonHoverEffect"))
 local Theme = require(ReplicatedStorage:WaitForChild("UITheme"))
+local UISurface = require(ReplicatedStorage:WaitForChild("UISurface"))
 
 local player = Players.LocalPlayer
 
@@ -141,6 +142,33 @@ local function createRow(itemList, item, layoutOrder, logPrefix, onBuy)
 	buyGradient.Rotation = T.buyGradientRotation
 	buyGradient.Color = T.buyGradient
 	buyGradient.Parent = buyButton
+
+	-- Themes that define buySurface replace the plain gradient above with a
+	-- gradient + tiled pattern over an extruded lip, and move the caption into
+	-- a child label. The UICorner and UIGradient already created are updated in
+	-- place, not duplicated. Production leaves buySurface nil and keeps its
+	-- plain "BUY" text.
+	if T.buySurface then
+		UISurface.applyTexturedSurface(buyButton, T.buySurface)
+		buyButton.Text = ""
+
+		-- The pattern is a child, and children always render above their
+		-- parent, so it would cover the button's own Text. The caption goes in
+		-- a sibling label with a higher ZIndex instead, kept short by the lip
+		-- so it centres on the lit face.
+		local caption = Instance.new("TextLabel")
+		caption.Name = "Caption"
+		caption.Size = UDim2.new(1, 0, 1, -(T.buySurface.depth or 0))
+		caption.BackgroundTransparency = 1
+		caption.Text = T.buySurface.captionText
+		caption.Font = T.buyFont
+		caption.TextSize = T.buyTextSize
+		caption.TextColor3 = T.buyTextColor
+		caption.TextStrokeColor3 = T.buyStrokeColor
+		caption.TextStrokeTransparency = T.buyStrokeTransparency
+		caption.ZIndex = 2
+		caption.Parent = buyButton
+	end
 
 	buyButton.MouseButton1Click:Connect(function()
 		if onBuy then

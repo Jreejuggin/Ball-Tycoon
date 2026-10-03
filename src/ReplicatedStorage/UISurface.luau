@@ -11,11 +11,13 @@
 --   local UISurface = require(ReplicatedStorage.UISurface)
 --   UISurface.applyTexturedSurface(someFrame, Theme.cashPackPanel.titleBarSurface)
 --
--- Currently applied only to CashPackPanel's TitleBar and its row Buy buttons.
+-- Applied by the prototype theme to every panel header (the cash panel's and
+-- the four shop panels'), their close buttons, and every row's Buy button.
 
 local UISurface = {}
 
 local PATTERN_NAME = "PatternLayer"
+local FACE_NAME = "SurfaceFace"
 
 -- Reuses an existing child of this class rather than adding a second one, so
 -- applyTexturedSurface can be called repeatedly on the same object. Buy
@@ -35,41 +37,33 @@ end
 --   image, tileSize, patternColor, patternTransparency
 --   cornerRadius, gradientRotation, gradientTop, gradientBottom
 --   strokeColor, strokeThickness   (optional -- omit for no stroke)
+--   depth, depthColor              (optional -- omit for a flat surface)
 --   clipsDescendants               (optional, defaults true)
-function UISurface.applyTexturedSurface(guiObject, config)
+
+-- Paints the gradient and the tiled pattern onto one object.
+--
+-- Split out of applyTexturedSurface because a surface with depth paints its
+-- face rather than itself: the object underneath has to stay a flat slab of
+-- depthColor for the lip to read as an extruded side.
+local function paintTexture(obj, config)
 	-- A UIGradient multiplies against BackgroundColor3, so the background has
 	-- to be white for the gradient to define the colour on its own. Leaving a
 	-- green background under a green gradient darkens it into mud.
-	guiObject.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	guiObject.BackgroundTransparency = 0
+	obj.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	obj.BackgroundTransparency = 0
 
-	-- Square tiles would otherwise paint over the rounded corners. Clipping on
-	-- the parent is what actually masks them to the UICorner shape.
-	--
-	-- It clips every other child too, so a surface whose children intentionally
-	-- overflow (e.g. a button that grows past its container on hover) should
-	-- pass clipsDescendants = false.
-	guiObject.ClipsDescendants = config.clipsDescendants ~= false
-
-	local corner = ensureOfClass(guiObject, "UICorner")
+	local corner = ensureOfClass(obj, "UICorner")
 	corner.CornerRadius = UDim.new(0, config.cornerRadius)
 
-	local gradient = ensureOfClass(guiObject, "UIGradient")
+	local gradient = ensureOfClass(obj, "UIGradient")
 	gradient.Rotation = config.gradientRotation
 	gradient.Color = ColorSequence.new(config.gradientTop, config.gradientBottom)
 
-	if config.strokeColor then
-		local stroke = ensureOfClass(guiObject, "UIStroke")
-		stroke.Color = config.strokeColor
-		stroke.Thickness = config.strokeThickness
-		stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
-	end
-
-	local pattern = guiObject:FindFirstChild(PATTERN_NAME)
+	local pattern = obj:FindFirstChild(PATTERN_NAME)
 	if not pattern then
 		pattern = Instance.new("ImageLabel")
 		pattern.Name = PATTERN_NAME
-		pattern.Parent = guiObject
+		pattern.Parent = obj
 	end
 
 	pattern.Image = config.image
@@ -92,6 +86,62 @@ function UISurface.applyTexturedSurface(guiObject, config)
 	patternCorner.CornerRadius = UDim.new(0, config.cornerRadius)
 
 	return pattern
+end
+
+function UISurface.applyTexturedSurface(guiObject, config)
+	-- Square tiles would otherwise paint over the rounded corners. Clipping on
+	-- the parent is what actually masks them to the UICorner shape.
+	--
+	-- It clips every other child too, so a surface whose children intentionally
+	-- overflow (e.g. a button that grows past its container on hover) should
+	-- pass clipsDescendants = false.
+	guiObject.ClipsDescendants = config.clipsDescendants ~= false
+
+	if config.strokeColor then
+		local stroke = ensureOfClass(guiObject, "UIStroke")
+		stroke.Color = config.strokeColor
+		stroke.Thickness = config.strokeThickness
+		-- Border rather than Contextual. On a TextButton -- the X and the Buy
+		-- buttons -- Contextual puts the stroke around the rendered TEXT, and
+		-- both of those blank their own Text and draw a Caption child instead,
+		-- so the outline had nothing to draw around and never showed up. On a
+		-- plain Frame like the TitleBar the two modes behave the same, which is
+		-- why only the buttons were missing their border.
+		stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	end
+
+	local depth = config.depth or 0
+	if depth <= 0 then
+		return paintTexture(guiObject, config)
+	end
+
+	-- The 3D look: the object itself becomes a flat slab of the darker
+	-- depthColor, and the lit face sits on top of it `depth` pixels short, so
+	-- the slab shows along the bottom as an extruded lip. Both carry the same
+	-- cornerRadius, so the lip tapers away into the rounded bottom corners.
+	guiObject.BackgroundColor3 = config.depthColor
+	guiObject.BackgroundTransparency = 0
+
+	local corner = ensureOfClass(guiObject, "UICorner")
+	corner.CornerRadius = UDim.new(0, config.cornerRadius)
+
+	local face = guiObject:FindFirstChild(FACE_NAME)
+	if not face then
+		face = Instance.new("Frame")
+		face.Name = FACE_NAME
+		face.Parent = guiObject
+	end
+	face.BorderSizePixel = 0
+	-- Scale on the width so the face follows ButtonHoverEffect's Size tween;
+	-- the depth stays a fixed pixel offset so the lip does not thicken as the
+	-- button grows.
+	face.Size = UDim2.new(1, 0, 1, -depth)
+	face.Position = UDim2.fromScale(0, 0)
+	-- Siblings only (the GUI is ZIndexBehavior.Sibling): 0 keeps the face below
+	-- every caption and label sharing this parent.
+	face.ZIndex = 0
+
+	return paintTexture(face, config)
 end
 
 return UISurface
