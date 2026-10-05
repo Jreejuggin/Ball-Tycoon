@@ -641,8 +641,25 @@ Theme.cashPackRow = {
 		captionText = "Buy",
 	},
 
-	iconPosition = UDim2.new(0, 10, 0.5, 0),
+	-- Centred in the iconImageSize slot below, so the fallback badge sits where
+	-- the art would have been.
+	iconPosition = UDim2.new(0, 22, 0.5, 0),
 	iconSize = UDim2.new(0, 60, 0, 60),
+
+	-- Cash-pile art, used instead of the badge when a pack has iconAssetId.
+	-- One slot and one zoom for every tier: the art itself grows from 5K to
+	-- 5M, so a per-tier scale here would double the progression.
+	iconImagePosition = UDim2.new(0, 4, 0.5, 0),
+	iconImageSize = UDim2.new(0, 96, 0, 72),
+	-- Fraction of the source image the slot shows. The piles are drawn small
+	-- and centred inside a lot of transparent padding; at Fit the whole square
+	-- would letterbox into the slot and leave even the 5M pile under 40px
+	-- wide. The controller clips to this window instead, which zooms every
+	-- tier by the same factor. Measured from the art: the widest pile spans
+	-- 330/512 across and the tallest 242/512 down, both centred, so this
+	-- window holds all eight with a couple of pixels to spare.
+	iconImageCrop = Vector2.new(336 / 512, 252 / 512),
+
 	iconCorner = UDim.new(0.5, 0),
 	iconFont = Theme.font.heading,
 	iconTextSize = 16,
@@ -650,16 +667,16 @@ Theme.cashPackRow = {
 	iconStrokeColor = Theme.color.textStroke,
 	iconStrokeTransparency = 0,
 
-	namePosition = UDim2.new(0, 84, 0, 10),
-	nameSize = UDim2.new(0, 150, 0, 24),
+	namePosition = UDim2.new(0, 106, 0, 10),
+	nameSize = UDim2.new(0, 128, 0, 24),
 	nameFont = Theme.font.heading,
 	nameTextSize = 18,
 	nameColor = Color3.fromRGB(90, 220, 110),
 	nameStrokeColor = Theme.color.textStroke,
 	nameStrokeTransparency = 0,
 
-	pricePosition = UDim2.new(0, 84, 0, 38),
-	priceSize = UDim2.new(0, 150, 0, 22),
+	pricePosition = UDim2.new(0, 106, 0, 38),
+	priceSize = UDim2.new(0, 128, 0, 22),
 	priceFont = Theme.font.body,
 	priceTextSize = 16,
 	priceColor = Theme.color.white,

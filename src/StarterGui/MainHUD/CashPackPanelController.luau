@@ -35,30 +35,62 @@ local function createPackRow(item, layoutOrder, itemList)
 	rowStroke.Transparency = T.strokeTransparency
 	rowStroke.Parent = row
 
-	-- Icon badge (pack size abbreviation, e.g. "5K", "1M")
-	local icon = Instance.new("Frame")
-	icon.Name = "Icon"
-	icon.AnchorPoint = Vector2.new(0, 0.5)
-	icon.Position = T.iconPosition
-	icon.Size = T.iconSize
-	icon.BackgroundColor3 = item.iconColor
-	icon.BorderSizePixel = 0
-	icon.Parent = row
+	if item.iconAssetId and item.iconAssetId ~= "" then
+		-- Cash-pile art. The slot clips an oversized ImageLabel rather than
+		-- sizing the label directly: ScaleType.Fit fits the whole source
+		-- square, transparent padding included, so on its own it would shrink
+		-- the pile to a fraction of the slot. Blowing the label up by
+		-- 1/iconImageCrop and clipping brings the padding back off-slot.
+		--
+		-- The zoom is one shared ratio, identical on every row, so the size
+		-- progression drawn into the art is preserved rather than doubled.
+		-- It is a ratio, not a pixel rect, so it holds whatever resolution
+		-- the art is uploaded at -- ImageRectOffset would not.
+		local slot = Instance.new("Frame")
+		slot.Name = "Icon"
+		slot.AnchorPoint = Vector2.new(0, 0.5)
+		slot.Position = T.iconImagePosition
+		slot.Size = T.iconImageSize
+		slot.BackgroundTransparency = 1
+		slot.ClipsDescendants = true
+		slot.Parent = row
 
-	local iconCorner = Instance.new("UICorner")
-	iconCorner.CornerRadius = T.iconCorner
-	iconCorner.Parent = icon
+		local icon = Instance.new("ImageLabel")
+		icon.Name = "Image"
+		icon.AnchorPoint = Vector2.new(0.5, 0.5)
+		icon.Position = UDim2.fromScale(0.5, 0.5)
+		icon.Size = UDim2.fromScale(1 / T.iconImageCrop.X, 1 / T.iconImageCrop.Y)
+		icon.BackgroundTransparency = 1
+		icon.Image = item.iconAssetId
+		icon.ScaleType = Enum.ScaleType.Fit
+		icon.Parent = slot
+	else
+		-- Fallback badge (pack size abbreviation, e.g. "5K", "1M") for a pack
+		-- that has no art yet.
+		local icon = Instance.new("Frame")
+		icon.Name = "Icon"
+		icon.AnchorPoint = Vector2.new(0, 0.5)
+		icon.Position = T.iconPosition
+		icon.Size = T.iconSize
+		icon.BackgroundColor3 = item.iconColor
+		icon.BorderSizePixel = 0
+		icon.Parent = row
 
-	local iconLabel = Instance.new("TextLabel")
-	iconLabel.BackgroundTransparency = 1
-	iconLabel.Size = UDim2.new(1, 0, 1, 0)
-	iconLabel.Font = T.iconFont
-	iconLabel.TextSize = T.iconTextSize
-	iconLabel.TextColor3 = T.iconTextColor
-	iconLabel.TextStrokeColor3 = T.iconStrokeColor
-	iconLabel.TextStrokeTransparency = T.iconStrokeTransparency
-	iconLabel.Text = item.iconText
-	iconLabel.Parent = icon
+		local iconCorner = Instance.new("UICorner")
+		iconCorner.CornerRadius = T.iconCorner
+		iconCorner.Parent = icon
+
+		local iconLabel = Instance.new("TextLabel")
+		iconLabel.BackgroundTransparency = 1
+		iconLabel.Size = UDim2.new(1, 0, 1, 0)
+		iconLabel.Font = T.iconFont
+		iconLabel.TextSize = T.iconTextSize
+		iconLabel.TextColor3 = T.iconTextColor
+		iconLabel.TextStrokeColor3 = T.iconStrokeColor
+		iconLabel.TextStrokeTransparency = T.iconStrokeTransparency
+		iconLabel.Text = item.iconText
+		iconLabel.Parent = icon
+	end
 
 	-- Name
 	local nameLabel = Instance.new("TextLabel")
