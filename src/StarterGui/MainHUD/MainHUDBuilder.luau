@@ -358,6 +358,45 @@ local function buildCashHUDGroup(gui)
 		ScaleType = Enum.ScaleType.Fit,
 	}, teleportButton)
 
+	-- Placed from the house button's own Position plus one button width and
+	-- the gap, rather than a fixed scale, so it follows if the house moves.
+	-- Shape, size, corner, stroke weight and ZIndex all mirror the house
+	-- button; see Theme.cashHud for why its background is white.
+	local teleportPosition = T.teleportPosition
+	local inventoryButton = new("TextButton", {
+		Name = "InventoryButton",
+		Size = T.teleportSize,
+		Position = UDim2.new(
+			teleportPosition.X.Scale,
+			teleportPosition.X.Offset + T.teleportSize.X.Offset + T.inventoryGap,
+			teleportPosition.Y.Scale,
+			teleportPosition.Y.Offset
+		),
+		AnchorPoint = Vector2.new(0.5, 0),
+		BackgroundColor3 = T.inventoryColor,
+		BorderSizePixel = 0,
+		ZIndex = 3,
+		Text = "",
+	}, group)
+	corner(T.teleportCorner, inventoryButton)
+	stroke(T.teleportStrokeThickness, T.teleportStrokeTransparency, T.inventoryStrokeColor, inventoryButton, "AccentStroke")
+
+	new("UIGradient", {
+		Rotation = T.teleportGradientRotation,
+		Color = T.inventoryGradient,
+	}, inventoryButton)
+
+	-- Scaled past the button's bounds to match the house icon's apparent size;
+	-- centred so it grows evenly in every direction.
+	new("ImageLabel", {
+		Size = UDim2.fromScale(T.inventoryIconScale, T.inventoryIconScale),
+		Position = UDim2.fromScale(0.5, 0.5),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		BackgroundTransparency = 1,
+		Image = Theme.asset.inventoryIcon,
+		ScaleType = Enum.ScaleType.Fit,
+	}, inventoryButton)
+
 	local settingsButton = new("TextButton", {
 		Name = "SettingsButton",
 		Size = T.settingsSize,
@@ -418,6 +457,7 @@ local function buildCashHUDGroup(gui)
 		cashLabel = cashLabel,
 		plusButton = plusButton,
 		teleportButton = teleportButton,
+		inventoryButton = inventoryButton,
 		settingsButton = settingsButton,
 		shopButton = shopButton,
 		petsButton = petsButton,
@@ -684,6 +724,39 @@ local function buildPetsPanel(gui)
 	return { panel = panel, closeButton = closeButton }
 end
 
+-- Same chrome as PetsPanel, with an empty Content frame below the title bar
+-- in place of its placeholder rows, for a later pass to fill.
+local function buildInventoryPanel(gui)
+	local T = Theme.inventoryPanel
+
+	local panel = new("Frame", {
+		Name = "InventoryPanel",
+		Size = T.size,
+		Position = T.position,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		BackgroundColor3 = Theme.panel.background,
+		BorderSizePixel = 0,
+		ZIndex = 10,
+		Visible = false,
+	}, gui)
+	corner(Theme.panel.cornerRadius, panel)
+	panelStroke(panel)
+	padding(T.padding, T.padding, T.padding, T.padding, panel)
+	listLayout(T.rowSpacing, panel)
+
+	local _, closeButton = titleBar(panel, "Inventory", T.closeCorner, 1, 0)
+
+	local content = new("Frame", {
+		Name = "Content",
+		Size = UDim2.new(1, 0, 1, -Theme.titleBar.height),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		LayoutOrder = 2,
+	}, panel)
+
+	return { panel = panel, closeButton = closeButton, content = content }
+end
+
 local function buildCashPackPanel(gui)
 	local T = Theme.cashPackPanel
 
@@ -808,6 +881,7 @@ function MainHUDBuilder.build(gui)
 	local health = buildHealthBar(gui)
 	local shop = buildShopPanel(gui)
 	local pets = buildPetsPanel(gui)
+	local inventory = buildInventoryPanel(gui)
 	local cashPack = buildCashPackPanel(gui)
 	local cashHud = buildCashHUDGroup(gui)
 
@@ -822,6 +896,7 @@ function MainHUDBuilder.build(gui)
 		cashLabel = cashHud.cashLabel,
 		plusButton = cashHud.plusButton,
 		teleportButton = cashHud.teleportButton,
+		inventoryButton = cashHud.inventoryButton,
 		settingsButton = cashHud.settingsButton,
 		shopButton = cashHud.shopButton,
 		petsButton = cashHud.petsButton,
@@ -829,6 +904,7 @@ function MainHUDBuilder.build(gui)
 		settings = settings,
 		shop = shop,
 		pets = pets,
+		inventory = inventory,
 		cashPack = cashPack,
 		middleShops = middleShops,
 

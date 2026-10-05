@@ -49,6 +49,10 @@ local petsButton = refs.petsButton
 local petsPanel = refs.pets.panel
 local petsCloseButton = refs.pets.closeButton
 
+local inventoryButton = refs.inventoryButton
+local inventoryPanel = refs.inventory.panel
+local inventoryCloseButton = refs.inventory.closeButton
+
 local cashPackPanel = refs.cashPack.panel
 local cashPackCloseButton = refs.cashPack.closeButton
 
@@ -98,6 +102,7 @@ local PanelManager = require(ReplicatedStorage:WaitForChild("PanelManager"))
 PanelManager.registerPanel(settingsPanel)
 PanelManager.registerPanel(shopPanel)
 PanelManager.registerPanel(petsPanel)
+PanelManager.registerPanel(inventoryPanel)
 PanelManager.registerPanel(cashPackPanel)
 
 local function closeAllPanels()
@@ -127,10 +132,14 @@ end)
 petsButton.MouseButton1Click:Connect(function()
 	togglePanel(petsPanel)
 end)
+inventoryButton.MouseButton1Click:Connect(function()
+	togglePanel(inventoryPanel)
+end)
 
 settingsCloseButton.MouseButton1Click:Connect(closeAllPanels)
 shopCloseButton.MouseButton1Click:Connect(closeAllPanels)
 petsCloseButton.MouseButton1Click:Connect(closeAllPanels)
+inventoryCloseButton.MouseButton1Click:Connect(closeAllPanels)
 cashPackCloseButton.MouseButton1Click:Connect(closeAllPanels)
 
 -- ===== Settings toggles =====
@@ -274,12 +283,14 @@ player.CharacterAdded:Connect(onCharacterAdded)
 local hoverButtons = {
 	plusButton,
 	teleportToTycoonButton,
+	inventoryButton,
 	settingsButton,
 	shopButton,
 	petsButton,
 	settingsCloseButton,
 	shopCloseButton,
 	petsCloseButton,
+	inventoryCloseButton,
 	cashPackCloseButton,
 	musicToggle,
 	sfxToggle,
@@ -294,6 +305,7 @@ end
 -- most, since they have no visible label of their own).
 Tooltip.attach(plusButton, "Add Cash")
 Tooltip.attach(teleportToTycoonButton, "Teleport to Tycoon")
+Tooltip.attach(inventoryButton, "Inventory")
 Tooltip.attach(settingsButton, "Settings")
 Tooltip.attach(shopButton, "Shop")
 Tooltip.attach(petsButton, "Pets")

@@ -47,6 +47,7 @@ Theme.font = {
 
 Theme.asset = {
 	teleportIcon = "rbxassetid://79152891526373",
+	inventoryIcon = "rbxassetid://71866888766572",
 	settingsIcon = "rbxassetid://86564279252401",
 }
 
@@ -131,6 +132,22 @@ Theme.cashHud = {
 	teleportStrokeTextTransparency = 0.44999998807907104,
 	teleportGradientRotation = 90,
 	teleportGradient = ColorSequence.new(Color3.fromRGB(121, 226, 127), Color3.fromRGB(50, 132, 65)),
+
+	-- InventoryButton: the house button's twin, one gap to its right. Its size,
+	-- corner, stroke weight and gradient angle are read from the teleport keys
+	-- above so the two cannot drift apart; only the colours and icon are its own.
+	inventoryGap = 8,
+	-- White, unlike the house button's green: UIGradient multiplies against
+	-- BackgroundColor3, so a white base lets the gradient alone set the colour.
+	-- The house button's green-on-green renders darker than either value.
+	inventoryColor = Color3.fromRGB(255, 255, 255),
+	inventoryStrokeColor = Color3.fromRGB(222, 178, 128),
+	inventoryGradient = ColorSequence.new(Color3.fromRGB(186, 134, 82), Color3.fromRGB(110, 70, 38)),
+	-- The bag art fills less of its 512 canvas than the house does (356x307
+	-- against 383x379), so at 1:1 it reads visibly smaller beside it. 1.15 is
+	-- the square root of the two bounding-box areas' ratio, which matches
+	-- their apparent size; the art still lands inside the 44px button.
+	inventoryIconScale = 1.15,
 
 	settingsSize = UDim2.new(0, 58, 0, 44),
 	settingsPosition = UDim2.new(0, 0, 0, 116),
@@ -276,6 +293,16 @@ Theme.petsPanel = {
 	pillTextSize = 14,
 	pillTextColor = Theme.color.white,
 	pillStrokeTransparency = 0,
+}
+
+-- Placeholder panel with the same chrome as PetsPanel: centred, flat title
+-- bar, empty content area for a later pass to fill.
+Theme.inventoryPanel = {
+	size = UDim2.new(0, 320, 0, 260),
+	position = UDim2.new(0.5, 0, 0.5, 0),
+	padding = 0,
+	rowSpacing = 0,
+	closeCorner = 8,
 }
 
 --=============================================================== cash pack panel
