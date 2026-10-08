@@ -161,12 +161,21 @@ Players.PlayerRemoving:Connect(function(player)
 	for index = 1, 10 do
 		local plot = workspace:FindFirstChild("P" .. index)
 		if plot and plot:GetAttribute("Owner") == player.UserId then
-			-- Capture before Owner changes. CentreZoneService intentionally resets
-			-- centre BoolValues on that signal, so capturing afterward can lose them.
-			TycoonProgressService.SetDepartureProgress(player, TycoonProgressService.CapturePlot(plot))
-			plot:SetAttribute(RESTORING_PROGRESS_ATTR, nil)
-			plot:SetAttribute("Owner", nil)
+			-- Preserve the departing player's state before clearing the shared plot.
+			-- DataSaveScript reads this snapshot even if its PlayerRemoving handler
+			-- runs after the live plot has already been reset.
+			local departureProgress = TycoonProgressService.CapturePlot(plot)
+			TycoonProgressService.SetDepartureProgress(player, departureProgress)
+
+			-- Reset while ownership still identifies the departing player. The
+			-- restoration flag keeps cleanup quiet, and releasing Owner last makes
+			-- the blank plot immediately available for the next assignment.
+			plot:SetAttribute(RESTORING_PROGRESS_ATTR, true)
+			TycoonProgressService.ResetPlot(plot)
+			plot:SetAttribute("UpgradeLevel", 1)
 			plot:SetAttribute("OwnerName", nil)
+			plot:SetAttribute("Owner", nil)
+			plot:SetAttribute(RESTORING_PROGRESS_ATTR, nil)
 		end
 	end
 end)
