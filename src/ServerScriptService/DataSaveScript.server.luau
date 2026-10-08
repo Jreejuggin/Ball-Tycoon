@@ -5,9 +5,9 @@ local TycoonProgressService = require(script.Parent.TycoonProgressService)
 local TutorialProgressService = require(script.Parent.TutorialProgressService)
 local WorkerGiftCooldownService = require(script.Parent.WorkerGiftCooldownService)
 
--- Changing this version intentionally starts every player with a clean save.
--- The old v1 store remains isolated and is no longer loaded or written.
-local DATA_STORE_NAME = "PlayerCashData_v2"
+-- v3 intentionally starts every player with a clean save.
+-- The old v2 store remains isolated and untouched for rollback if needed.
+local DATA_STORE_NAME = "PlayerCashData_v3"
 local playerDataStore = DataStoreService:GetDataStore(DATA_STORE_NAME)
 
 local AUTOSAVE_INTERVAL_SECONDS = 60

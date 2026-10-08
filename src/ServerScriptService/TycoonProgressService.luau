@@ -6,6 +6,12 @@ local TycoonProgressService = {}
 local loadedProgressByUserId = {}
 local departureProgressByUserId = {}
 
+-- Plot purchase scripts are intentionally one-way while a player owns a plot:
+-- after a machine is bought, the script stops watching for Activated to become
+-- false. Capture each plot's clean server-script state before progress is ever
+-- applied so ResetPlot can restart those scripts in their original blank state.
+local plotScriptBaselineByPlot = setmetatable({}, { __mode = "k" })
+
 local function isWorkerActivation(value)
 	return value:IsA("BoolValue")
 		and value.Parent ~= nil
@@ -26,6 +32,51 @@ local function getRelativePath(plot, instance)
 		current = current.Parent
 	end
 	return table.concat(segments, "/")
+end
+
+local function getOrCapturePlotScriptBaseline(plot)
+	local baseline = plotScriptBaselineByPlot[plot]
+	if baseline then
+		return baseline
+	end
+
+	baseline = {}
+	for _, descendant in ipairs(plot:GetDescendants()) do
+		if descendant:IsA("Script") then
+			baseline[descendant] = descendant.Disabled
+		end
+	end
+	plotScriptBaselineByPlot[plot] = baseline
+	return baseline
+end
+
+local function restoreBlankPlotScriptState(plot)
+	local baseline = getOrCapturePlotScriptBaseline(plot)
+
+	-- Stop every captured plot script first. Re-enabling only the scripts that
+	-- were active in the original blank plot clears their one-owner local state.
+	-- Producer scripts (droppers, conveyors, presses, reactors) stay disabled.
+	for scriptObject in pairs(baseline) do
+		if scriptObject.Parent then
+			scriptObject.Disabled = true
+		end
+	end
+	for scriptObject, wasDisabled in pairs(baseline) do
+		if scriptObject.Parent then
+			scriptObject.Disabled = wasDisabled
+		end
+	end
+end
+
+local function removePlotRuntimeObjects(plot)
+	-- Balls, crates, and crate fragments live directly under Workspace rather
+	-- than inside the plot model. Their SourcePlot attribute keeps cleanup
+	-- plot-scoped so releasing one plot cannot remove another player's income.
+	for _, child in ipairs(workspace:GetChildren()) do
+		if child:GetAttribute("SourcePlot") == plot.Name then
+			child:Destroy()
+		end
+	end
 end
 
 local function findByRelativePath(plot, path)
@@ -115,6 +166,15 @@ function TycoonProgressService.ResetPlot(plot)
 			child:Destroy()
 		end
 	end
+
+	-- Setting Activated values to false is not enough for legacy purchase scripts
+	-- that stop listening after a purchase. Restore the original enabled/disabled
+	-- script state so their normal startup code rebuilds the blank presentation.
+	restoreBlankPlotScriptState(plot)
+
+	-- Runtime income objects are not descendants of the plot, so clear them by
+	-- their server-authored plot tag after producer scripts have been stopped.
+	removePlotRuntimeObjects(plot)
 end
 
 function TycoonProgressService.ApplyPlot(plot, progress)
