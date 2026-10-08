@@ -59,14 +59,21 @@ Players.PlayerAdded:Connect(function(player)
 	cash.Value = 0
 	cash.Parent = leaderstats
 
-	local bankData = Instance.new("Folder")
-	bankData.Name = "BankData"
-	bankData.Parent = player
+	local gemData = Instance.new("Folder")
+	gemData.Name = "GemData"
+	gemData.Parent = player
 
-	local bankedCash = Instance.new("IntValue")
-	bankedCash.Name = "BankedCash"
-	bankedCash.Value = 0
-	bankedCash.Parent = bankData
+	-- Gems the player is carrying. Earned through gameplay, not yet safe.
+	local gems = Instance.new("IntValue")
+	gems.Name = "Gems"
+	gems.Value = 0
+	gems.Parent = gemData
+
+	-- Gems stored in the bank. Only BankZoneHandler moves gems into this pool.
+	local bankedGems = Instance.new("IntValue")
+	bankedGems.Name = "BankedGems"
+	bankedGems.Value = 0
+	bankedGems.Parent = gemData
 
 	local success, savedData = pcall(function()
 		return playerDataStore:GetAsync(player.UserId)
@@ -74,7 +81,8 @@ Players.PlayerAdded:Connect(function(player)
 
 	if success and type(savedData) == "table" then
 		cash.Value = tonumber(savedData.Cash) or 0
-		bankedCash.Value = tonumber(savedData.BankedCash) or 0
+		gems.Value = math.max(0, math.floor(tonumber(savedData.Gems) or 0))
+		bankedGems.Value = math.max(0, math.floor(tonumber(savedData.BankedGems) or 0))
 		player:SetAttribute("SavedUpgradeLevel", tonumber(savedData.UpgradeLevel) or 1)
 	else
 		player:SetAttribute("SavedUpgradeLevel", 1)
@@ -123,7 +131,9 @@ end)
 
 local function getPlayerData(player)
 	local cash = player:FindFirstChild("leaderstats") and player.leaderstats:FindFirstChild("Cash")
-	local bankedCash = player:FindFirstChild("BankData") and player.BankData:FindFirstChild("BankedCash")
+	local gemData = player:FindFirstChild("GemData")
+	local gems = gemData and gemData:FindFirstChild("Gems")
+	local bankedGems = gemData and gemData:FindFirstChild("BankedGems")
 	local plot = getAssignedPlot(player)
 
 	local purchasedItems = {}
@@ -150,7 +160,8 @@ local function getPlayerData(player)
 
 	return {
 		Cash = cash and cash.Value or 0,
-		BankedCash = bankedCash and bankedCash.Value or 0,
+		Gems = gems and gems.Value or 0,
+		BankedGems = bankedGems and bankedGems.Value or 0,
 		UpgradeLevel = upgradeLevel,
 		CentreLevel = centreLevel,
 		PlotColor = serializedPlotColor,
