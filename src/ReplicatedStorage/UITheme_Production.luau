@@ -49,6 +49,13 @@ Theme.color = {
 Theme.font = {
 	heading = Enum.Font.GothamBlack,
 	body = Enum.Font.GothamBold,
+	-- Not bold. Montserrat by name: this Studio build ships no Gotham files at
+	-- all, only Montserrat in Gotham's four weights, so the Gotham enums are
+	-- almost certainly drawn with it and this names the face actually shown.
+	regular = Enum.Font.Montserrat,
+	-- Not bold either, but rounded at every stroke end, so it reads playful
+	-- where Gotham reads plain.
+	rounded = Enum.Font.Nunito,
 }
 
 Theme.asset = {
@@ -100,6 +107,30 @@ Theme.itemList = {
 	greenScrollBar = Color3.fromRGB(80, 210, 100),
 }
 
+--=============================================================== HUD surface
+
+-- The slate panel look shared by the cash panel and the richest banner, so
+-- the two read as cut from the same sheet and cannot drift apart. Applied by
+-- MainHUDBuilder's slateSurface; nothing else should restate these values.
+Theme.hudSurface = {
+	-- White underneath, because UIGradient multiplies against BackgroundColor3;
+	-- the gradient alone sets the colour.
+	gradientRotation = 90,
+	gradient = ColorSequence.new(Theme.color.hudFillTop, Theme.color.hudFillBottom),
+	strokeColor = Color3.fromRGB(176, 190, 208),
+	strokeThickness = 2,
+	strokeTransparency = 0,
+	-- The lattice over the gradient, black at 30% strength.
+	tileSize = UDim2.fromOffset(86, 86),
+	tileColor = Color3.fromRGB(0, 0, 0),
+	tileTransparency = 0.7,
+	-- The outline on text set over the surface. GothamBlack is already
+	-- Gotham's heaviest weight, so this UIStroke is where the extra heft comes
+	-- from; it replaces the 1px legacy TextStroke. The slab buttons' near-black.
+	textOutlineThickness = 2,
+	textOutlineColor = Theme.color.hudOutline,
+}
+
 --=============================================================== cash HUD
 
 Theme.cashHud = {
@@ -108,30 +139,16 @@ Theme.cashHud = {
 
 	cashPanelSize = UDim2.new(0, 190, 0, 52),
 	cashPanelPosition = UDim2.new(0, 0, 0, 56),
-	-- White because UIGradient multiplies against BackgroundColor3; the
-	-- gradient alone sets the colour.
-	cashPanelGradientRotation = 90,
-	cashPanelGradient = ColorSequence.new(Theme.color.hudFillTop, Theme.color.hudFillBottom),
-	-- The lattice over the gradient, black at 30% strength.
-	cashPanelTileSize = UDim2.fromOffset(86, 86),
-	cashPanelTileColor = Color3.fromRGB(0, 0, 0),
-	cashPanelTileTransparency = 0.7,
+	-- Gradient, outline and texture come from Theme.hudSurface.
 	cashPanelCorner = 16,
-	cashPanelStrokeThickness = 2,
-	cashPanelStrokeTransparency = 0,
-	cashPanelStrokeColor = Color3.fromRGB(176, 190, 208),
 	cashPanelPadding = 8,
 
 	cashLabelSize = UDim2.new(0, 92, 0, 36),
 	cashLabelPosition = UDim2.new(-0.2744101583957672, 52, 0.5, 0),
 	cashLabelColor = Theme.color.cashGreen,
 	cashLabelFont = Theme.font.heading,
+	-- Outlined with Theme.hudSurface's text outline.
 	cashLabelTextSize = 24,
-	-- GothamBlack is already Gotham's heaviest weight, so the number gets its
-	-- extra heft from a thicker outline instead: a UIStroke on the text, which
-	-- replaces the 1px legacy TextStroke it had. The slab buttons' near-black.
-	cashLabelOutlineThickness = 2,
-	cashLabelOutlineColor = Theme.color.hudOutline,
 
 	-- The plus button is extruded: a lit face over a darker base of the same
 	-- size, plusDepth px lower, both inside a PlusWrapper tall enough to hold
@@ -286,20 +303,39 @@ Theme.toggle = {
 
 --=============================================================== richest banner
 
+-- The banner wears Theme.hudSurface, the cash panel's slate, so the two match
+-- in colour -- but see-through, where the cash panel is solid.
+-- Width is set in code to fit the text (see MainHUDBuilder), so size holds
+-- only the height.
+local RICHEST_BANNER_HEIGHT = 30
 Theme.richestBanner = {
-	size = UDim2.new(0, 0, 0, 40),
+	size = UDim2.new(0, 0, 0, RICHEST_BANNER_HEIGHT),
 	position = UDim2.new(0.5, 0, -0.08698859065771103, 12),
-	background = Color3.fromRGB(28, 30, 34),
-	cornerRadius = 20,
-	strokeThickness = 2,
-	strokeTransparency = 0.10000000149011612,
-	strokeColor = Color3.fromRGB(255, 200, 60),
-	paddingX = 18,
+	-- The cash panel's corner scaled to this height (16 at 52px -> 9 at
+	-- 30px), so the two share a shape. Derived rather than copied, so it
+	-- follows if either changes.
+	cornerRadius = math.round(
+		Theme.cashHud.cashPanelCorner * RICHEST_BANNER_HEIGHT / Theme.cashHud.cashPanelSize.Y.Offset
+	),
+	paddingX = 14,
+	-- Past this fraction of the screen's width the banner stops growing and
+	-- the text shrinks (wrapping onto two lines if that reads larger), so a
+	-- long name and a 9-figure value still fit a phone held upright.
+	maxWidthScale = 0.9,
+	-- Measured off the reference screenshot, whose banner shows the sky at
+	-- roughly 60%. The outline and texture fade by the same amount, so the
+	-- banner thins out as a whole rather than leaving them floating solid.
+	surfaceTransparency = 0.6,
 
-	labelColor = Color3.fromRGB(255, 205, 70),
-	labelFont = Theme.font.heading,
-	labelTextSize = 20,
-	labelStrokeTransparency = 0,
+	labelColor = Theme.color.white,
+	-- Theme.font.rounded (Nunito) for something more playful.
+	labelFont = Theme.font.regular,
+	-- The classic thin edge, not the cash number's 2px: that outline exists to
+	-- add weight, and this text is meant to read light.
+	labelOutlineThickness = 1,
+	-- The size the text is drawn at whenever the banner has room for it. 18 in
+	-- a 30px bar fills it more than 20 did in 40, closer to the reference.
+	labelTextSize = 18,
 }
 
 --=============================================================== health bar

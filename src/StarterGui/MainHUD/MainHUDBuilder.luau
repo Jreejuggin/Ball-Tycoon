@@ -12,6 +12,7 @@
 -- MainHUDController dot-indexes several of them, so they must exist first.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TextService = game:GetService("TextService")
 
 local Theme = require(ReplicatedStorage:WaitForChild("UITheme"))
 local UISurface = require(ReplicatedStorage:WaitForChild("UISurface"))
@@ -51,26 +52,77 @@ local function borderStroke(thickness, color, position, parent)
 	return s
 end
 
--- The lattice texture laid over a surface, as a TileLayer child. inset pulls
--- it in from every edge: negative to reach past the parent's UIPadding, which
--- shrinks even scale sizes, and positive to stop short of an Inner ring, which
--- the layer would otherwise draw over (children render above their parent's
--- stroke). Its own UICorner masks the square tiles to the rounded shape.
+-- The lattice texture laid over a surface, as a TileLayer child. It reaches
+-- past the parent's UIPadding to the real edges on its own -- padding shrinks
+-- even scale sizes, so without this it would sit inset by the padding -- which
+-- means any UIPadding must exist before this is called. inset then pulls it
+-- in from every edge, to stop short of an Inner ring the layer would otherwise
+-- draw over (children render above their parent's stroke). Its own UICorner
+-- masks the square tiles to the rounded shape.
 local function tileLayer(parent, tileSize, transparency, cornerRadius, inset)
+	local pad = parent:FindFirstChildOfClass("UIPadding")
+	local left = pad and pad.PaddingLeft.Offset or 0
+	local right = pad and pad.PaddingRight.Offset or 0
+	local top = pad and pad.PaddingTop.Offset or 0
+	local bottom = pad and pad.PaddingBottom.Offset or 0
+
 	local layer = new("ImageLabel", {
 		Name = "TileLayer",
 		Image = Theme.asset.latticeTile,
 		ScaleType = Enum.ScaleType.Tile,
 		TileSize = tileSize,
-		ImageColor3 = Color3.fromRGB(0, 0, 0),
+		ImageColor3 = Theme.hudSurface.tileColor,
 		ImageTransparency = transparency,
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -2 * inset, 1, -2 * inset),
-		Position = UDim2.fromOffset(inset, inset),
+		Size = UDim2.new(1, left + right - 2 * inset, 1, top + bottom - 2 * inset),
+		Position = UDim2.fromOffset(inset - left, inset - top),
 		ZIndex = 1,
 	}, parent)
 	corner(cornerRadius, layer)
 	return layer
+end
+
+-- The HUD's slate panel look (Theme.hudSurface): the gradient over a white
+-- base, the light outline, the rounded corner and the lattice texture. The
+-- cash panel and the richest banner both call this, so the two are built by
+-- one piece of code from one set of values. Anything set on top of it needs
+-- ZIndex 2 or more to sit above the TileLayer.
+--
+-- transparency (optional, default 0) fades the whole surface at once: the
+-- fill, and the outline and texture by the same factor, so a see-through
+-- surface keeps its look instead of leaving those two floating at full
+-- strength over whatever shows through.
+local function slateSurface(obj, cornerRadius, transparency)
+	local S = Theme.hudSurface
+	local opacity = 1 - (transparency or 0)
+	local function faded(ownTransparency)
+		return 1 - (1 - ownTransparency) * opacity
+	end
+
+	obj.BackgroundColor3 = Theme.color.white
+	obj.BackgroundTransparency = faded(0)
+	corner(cornerRadius, obj)
+	-- A Frame's stroke defaults to its border, drawn outside the edge, so the
+	-- texture never reaches under it.
+	stroke(S.strokeThickness, faded(S.strokeTransparency), S.strokeColor, obj)
+	new("UIGradient", {
+		Rotation = S.gradientRotation,
+		Color = S.gradient,
+	}, obj)
+	return tileLayer(obj, S.tileSize, faded(S.tileTransparency), cornerRadius, 0)
+end
+
+-- The heavier outline around text set on the slate surface. Left on stroke()'s
+-- default (Contextual) deliberately: on a text object that outlines the
+-- glyphs, which is the point here. thickness is optional and defaults to the
+-- surface's own, heavier outline.
+local function outlineText(label, thickness)
+	return stroke(
+		thickness or Theme.hudSurface.textOutlineThickness,
+		0,
+		Theme.hudSurface.textOutlineColor,
+		label
+	)
 end
 
 local function padding(top, bottom, left, right, parent)
@@ -318,21 +370,12 @@ local function buildCashHUDGroup(gui)
 		Name = "CashPanel",
 		Size = T.cashPanelSize,
 		Position = T.cashPanelPosition,
-		BackgroundColor3 = Theme.color.white,
 		BorderSizePixel = 0,
 		ZIndex = 2,
 	}, group)
-	corner(T.cashPanelCorner, cashPanel)
-	-- A Frame's stroke defaults to its border, drawn outside the edge, so the
-	-- texture never reaches under it.
-	stroke(T.cashPanelStrokeThickness, T.cashPanelStrokeTransparency, T.cashPanelStrokeColor, cashPanel)
-	new("UIGradient", {
-		Rotation = T.cashPanelGradientRotation,
-		Color = T.cashPanelGradient,
-	}, cashPanel)
+	-- Padding first: the surface's texture reads it to reach the real edges.
 	padding(T.cashPanelPadding, T.cashPanelPadding, T.cashPanelPadding, T.cashPanelPadding, cashPanel)
-	-- Inset by minus the padding, so it reaches the panel's real edges.
-	tileLayer(cashPanel, T.cashPanelTileSize, T.cashPanelTileTransparency, T.cashPanelCorner, -T.cashPanelPadding)
+	slateSurface(cashPanel, T.cashPanelCorner)
 
 	-- ZIndex 2 keeps the number above the TileLayer it shares the panel with.
 	local cashLabel = new("TextLabel", {
@@ -349,9 +392,7 @@ local function buildCashHUDGroup(gui)
 		TextSize = T.cashLabelTextSize,
 		TextXAlignment = Enum.TextXAlignment.Left,
 	}, cashPanel)
-	-- Left on stroke()'s default (Contextual) deliberately: on a text object
-	-- that outlines the glyphs, which is the point here.
-	stroke(T.cashLabelOutlineThickness, 0, T.cashLabelOutlineColor, cashLabel)
+	outlineText(cashLabel)
 
 	-- The extruded plus button. PlusBase and PlusButton are SIBLINGS inside
 	-- the wrapper: a child always draws above its parent, so a base parented
@@ -671,26 +712,56 @@ local function buildRichestBanner(gui)
 		Size = T.size,
 		Position = T.position,
 		AnchorPoint = Vector2.new(0.5, 0),
-		BackgroundColor3 = T.background,
 		BorderSizePixel = 0,
 		ZIndex = 5,
-		AutomaticSize = Enum.AutomaticSize.X,
 	}, gui)
-	corner(T.cornerRadius, banner)
-	stroke(T.strokeThickness, T.strokeTransparency, T.strokeColor, banner)
+	-- Padding first: the surface's texture reads it to reach the real edges.
 	padding(0, 0, T.paddingX, T.paddingX, banner)
+	slateSurface(banner, T.cornerRadius, T.surfaceTransparency)
 
+	-- TextScaled, capped at labelTextSize, so the text draws at full size
+	-- whenever the banner has room and shrinks only when it does not. Wrapped,
+	-- so a squeezed banner can go to two lines if that reads larger than one
+	-- tiny line. ZIndex 2 keeps it above the TileLayer.
 	local label = new("TextLabel", {
 		Name = "RichestLabel",
-		Size = UDim2.new(0, 0, 1, 0),
+		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
-		AutomaticSize = Enum.AutomaticSize.X,
+		ZIndex = 2,
 		Text = "★ Richest: --- ($0)",
 		TextColor3 = T.labelColor,
 		Font = T.labelFont,
-		TextSize = T.labelTextSize,
-		TextStrokeTransparency = T.labelStrokeTransparency,
+		TextScaled = true,
+		TextWrapped = true,
 	}, banner)
+	new("UITextSizeConstraint", { MaxTextSize = T.labelTextSize }, label)
+	outlineText(label, T.labelOutlineThickness)
+
+	-- The banner hugs its text, as AutomaticSize used to make it do, but stops
+	-- at maxWidthScale of the screen. AutomaticSize had no ceiling, so a long
+	-- name and a 9-figure value ran the banner off the sides of a phone. The
+	-- width allows for the text outline and a pixel of rounding either side,
+	-- so the text is never squeezed below full size while it fits.
+	local slack = 2 * T.labelOutlineThickness + 2
+	local function fitToText()
+		local textWidth = TextService:GetTextSize(
+			label.Text,
+			T.labelTextSize,
+			T.labelFont,
+			Vector2.new(math.huge, math.huge)
+		).X
+		local width = textWidth + 2 * T.paddingX + slack
+		local maxWidth = gui.AbsoluteSize.X * T.maxWidthScale
+		-- AbsoluteSize can read 0 before the GUI is laid out; fit the text
+		-- uncapped until it reports a real width.
+		if maxWidth > 0 then
+			width = math.min(width, maxWidth)
+		end
+		banner.Size = UDim2.new(0, width, T.size.Y.Scale, T.size.Y.Offset)
+	end
+	label:GetPropertyChangedSignal("Text"):Connect(fitToText)
+	gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitToText)
+	fitToText()
 
 	return { banner = banner, label = label }
 end

@@ -216,9 +216,9 @@ end
 local function updateRichestBanner()
 	local richestPlayer, richestCash = getRichestPlayer()
 	if richestPlayer then
-		richestLabel.Text = string.format("\226\152\133 Richest: %s (%s)", richestPlayer.Name, formatCash(richestCash))
+		richestLabel.Text = string.format("\226\152\133 %s rules the Tycoon Throne! (%s) \226\152\133", richestPlayer.Name, formatCash(richestCash))
 	else
-		richestLabel.Text = "\226\152\133 Richest: --- ($0)"
+		richestLabel.Text = "\226\152\133 --- rules the Tycoon Throne! ($0) \226\152\133"
 	end
 end
 
@@ -299,6 +299,27 @@ local hoverButtons = {
 for _, button in ipairs(hoverButtons) do
 	ButtonHoverEffect.apply(button)
 end
+
+-- ===== Plus button press =====
+-- The plus face sits plusDepth px above a darker base (see MainHUDBuilder),
+-- and that strip of base is what reads as depth. Pressing slides the face
+-- down onto the base so the strip vanishes, like a key pushed in. Size goes
+-- back to rest as well, so a hovered (grown) face lands exactly on the base.
+--
+-- Only the press is handled here. Letting go is already ButtonHoverEffect's
+-- job: its MouseButton1Up eases back to the hover pose, and its MouseLeave
+-- back to rest if the press is dragged off the button. Each newer tween on
+-- the same properties replaces the older one, so the two never fight.
+local PLUS_PRESS_TWEEN_INFO = TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local plusRestSize = plusButton.Size
+local plusPressedPosition = plusButton.Position + UDim2.fromOffset(0, Theme.cashHud.plusDepth)
+
+plusButton.MouseButton1Down:Connect(function()
+	TweenService:Create(plusButton, PLUS_PRESS_TWEEN_INFO, {
+		Size = plusRestSize,
+		Position = plusPressedPosition,
+	}):Play()
+end)
 
 -- ===== Shop button rainbow border =====
 -- One looping tween spins the stroke's gradient. Each repeat restarts from 0,
