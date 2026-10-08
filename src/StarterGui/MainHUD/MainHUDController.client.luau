@@ -300,6 +300,22 @@ for _, button in ipairs(hoverButtons) do
 	ButtonHoverEffect.apply(button)
 end
 
+-- ===== Shop button rainbow border =====
+-- One looping tween spins the stroke's gradient. Each repeat restarts from 0,
+-- and 0 and 360 look identical, so the wrap is seamless. The HUD does not
+-- reset on spawn, but cancel anyway if it is ever destroyed so the infinite
+-- tween does not outlive it.
+local shopRainbow = refs.shopRainbow
+local shopRainbowTween = TweenService:Create(
+	shopRainbow,
+	TweenInfo.new(Theme.cashHud.shopRainbowPeriod, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1),
+	{ Rotation = 360 }
+)
+shopRainbowTween:Play()
+shopRainbow.Destroying:Connect(function()
+	shopRainbowTween:Cancel()
+end)
+
 -- ===== Tooltips =====
 -- Only the CashHUDGroup buttons get tooltips (the icon-only ones benefit
 -- most, since they have no visible label of their own).

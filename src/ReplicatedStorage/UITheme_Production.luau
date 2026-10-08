@@ -32,6 +32,12 @@ Theme.color = {
 	panelStroke = Color3.fromRGB(92, 97, 107),
 	strokeGrey = Color3.fromRGB(84, 89, 102),
 	buttonDark = Color3.fromRGB(41, 43, 48),
+	-- The cash banner and the slate row buttons under it share this vertical
+	-- gradient, and the lattice texture over it, so the two read as one HUD.
+	hudFillTop = Color3.fromRGB(84, 94, 108),
+	hudFillBottom = Color3.fromRGB(52, 60, 72),
+	-- Near-black outline and 3D lip around the row buttons.
+	hudOutline = Color3.fromRGB(14, 17, 22),
 	closeRed = Color3.fromRGB(217, 77, 77),
 
 	cashGreen = Color3.fromRGB(107, 242, 140),
@@ -48,7 +54,13 @@ Theme.font = {
 Theme.asset = {
 	teleportIcon = "rbxassetid://79152891526373",
 	inventoryIcon = "rbxassetid://71866888766572",
+	shopIcon = "rbxassetid://125276496385783",
+	petsIcon = "rbxassetid://82132351525305",
 	settingsIcon = "rbxassetid://86564279252401",
+	-- 256x256 tileable diamond lattice. White RGB with the pattern in the
+	-- alpha channel, so ImageColor3 tints it and ImageTransparency sets its
+	-- strength.
+	latticeTile = "rbxassetid://110211627238517",
 }
 
 --=============================================================== shared chrome
@@ -96,11 +108,18 @@ Theme.cashHud = {
 
 	cashPanelSize = UDim2.new(0, 190, 0, 52),
 	cashPanelPosition = UDim2.new(0, 0, 0, 56),
-	cashPanelBackground = Theme.color.panelDark,
+	-- White because UIGradient multiplies against BackgroundColor3; the
+	-- gradient alone sets the colour.
+	cashPanelGradientRotation = 90,
+	cashPanelGradient = ColorSequence.new(Theme.color.hudFillTop, Theme.color.hudFillBottom),
+	-- The lattice over the gradient, black at 30% strength.
+	cashPanelTileSize = UDim2.fromOffset(86, 86),
+	cashPanelTileColor = Color3.fromRGB(0, 0, 0),
+	cashPanelTileTransparency = 0.7,
 	cashPanelCorner = 16,
 	cashPanelStrokeThickness = 2,
-	cashPanelStrokeTransparency = 0.25,
-	cashPanelStrokeColor = Theme.color.strokeGrey,
+	cashPanelStrokeTransparency = 0,
+	cashPanelStrokeColor = Color3.fromRGB(176, 190, 208),
 	cashPanelPadding = 8,
 
 	cashLabelSize = UDim2.new(0, 92, 0, 36),
@@ -108,75 +127,120 @@ Theme.cashHud = {
 	cashLabelColor = Theme.color.cashGreen,
 	cashLabelFont = Theme.font.heading,
 	cashLabelTextSize = 24,
-	cashLabelStrokeTransparency = 0,
+	-- GothamBlack is already Gotham's heaviest weight, so the number gets its
+	-- extra heft from a thicker outline instead: a UIStroke on the text, which
+	-- replaces the 1px legacy TextStroke it had. The slab buttons' near-black.
+	cashLabelOutlineThickness = 2,
+	cashLabelOutlineColor = Theme.color.hudOutline,
 
+	-- The plus button is extruded: a lit face over a darker base of the same
+	-- size, plusDepth px lower, both inside a PlusWrapper tall enough to hold
+	-- the two. plusPosition places the wrapper, so face and base together are
+	-- centred in the panel rather than the face alone.
 	plusSize = UDim2.new(0, 32, 0, 32),
 	plusPosition = UDim2.new(1, -8, 0.5, 0),
-	plusColor = Theme.color.accentGreen,
+	plusDepth = 6,
 	plusCorner = 8,
+	plusFaceGradient = ColorSequence.new(Color3.fromRGB(126, 232, 136), Color3.fromRGB(58, 178, 78)),
+	plusBaseGradient = ColorSequence.new(Color3.fromRGB(34, 118, 54), Color3.fromRGB(28, 98, 46)),
+	plusGradientRotation = 90,
+	plusStrokeColor = Color3.fromRGB(206, 248, 206),
+	plusStrokeThickness = 2,
+	-- Smaller than the panel's 86 so the pattern does not read as one huge
+	-- cell on a 32px button.
+	plusTileSize = UDim2.fromOffset(48, 48),
+	plusTileTransparency = 0.74,
 	plusFont = Theme.font.heading,
-	plusTextSize = 22,
 	plusTextColor = Theme.color.white,
-	plusStrokeTransparency = 0,
+	-- Heavier for the same reason as the cash number, and in the same outline.
+	plusTextOutlineThickness = 2,
+	plusTextOutlineColor = Theme.color.hudOutline,
 
-	teleportSize = UDim2.new(0, 44, 0, 44),
-	teleportPosition = UDim2.new(0.15263158082962036, 0, 0.01875000074505806, 0),
-	teleportColor = Color3.fromRGB(76, 155, 86),
-	teleportCorner = 8,
-	teleportStrokeThickness = 2,
-	teleportStrokeTransparency = 0,
-	teleportStrokeColor = Color3.fromRGB(181, 255, 144),
-	teleportTextColor = Theme.color.white,
-	teleportFont = Theme.font.heading,
-	teleportTextSize = 17,
-	teleportStrokeTextTransparency = 0.44999998807907104,
+	-- The house button is built from the same slab as the row below, at the
+	-- same rowButtonSize, so only its placement, face and ring live here. Its
+	-- vestigial text properties went when it took the shared look: Text has
+	-- been "" since the icon landed, so none of them drew anything.
+	--
+	-- Y as a pixel offset rather than the original scale (0.01875 of the
+	-- 160px group, i.e. 3px), so the house button stays put if the group's
+	-- height ever changes.
+	teleportPosition = UDim2.new(0.15263158082962036, 0, 0, 3),
+	-- The one button that fires an action rather than opening a panel, so it
+	-- keeps the green face it has always worn while the row below stays slate.
+	-- Both stops are the original gradient, unchanged.
 	teleportGradientRotation = 90,
 	teleportGradient = ColorSequence.new(Color3.fromRGB(121, 226, 127), Color3.fromRGB(50, 132, 65)),
+	-- The face's own highlight green -- lighter than even its top stop
+	-- (121, 226, 127), so it reads as a lit rim over the whole gradient, and
+	-- the same hue, so it frames the green instead of cutting across it. This
+	-- is the stroke colour the button wore before the slab, restored.
+	teleportRingColor = Color3.fromRGB(181, 255, 144),
 
-	-- InventoryButton: the house button's twin, one gap to its right. Its size,
-	-- corner, stroke weight and gradient angle are read from the teleport keys
-	-- above so the two cannot drift apart; only the colours and icon are its own.
-	inventoryGap = 8,
-	-- White, unlike the house button's green: UIGradient multiplies against
-	-- BackgroundColor3, so a white base lets the gradient alone set the colour.
-	-- The house button's green-on-green renders darker than either value.
-	inventoryColor = Color3.fromRGB(255, 255, 255),
-	inventoryStrokeColor = Color3.fromRGB(222, 178, 128),
-	inventoryGradient = ColorSequence.new(Color3.fromRGB(186, 134, 82), Color3.fromRGB(110, 70, 38)),
-	-- The bag art fills less of its 512 canvas than the house does (356x307
-	-- against 383x379), so at 1:1 it reads visibly smaller beside it. 1.15 is
-	-- the square root of the two bounding-box areas' ratio, which matches
-	-- their apparent size; the art still lands inside the 44px button.
+	-- ButtonRow: the four panel-opening buttons in one row under the cash
+	-- panel, 44px squares (the house button's size) 4px apart -- 4 * 44 + 3 * 4
+	-- = 188, centred under the 190px panel. The row itself draws nothing.
+	rowSize = UDim2.new(0, 188, 0, 44),
+	rowPosition = UDim2.new(0, 1, 0, 116),
+
+	rowButtonSize = UDim2.new(0, 44, 0, 44),
+	-- One button plus one gap.
+	rowButtonStep = 48,
+	-- 12 on the earlier 56px buttons; 9 keeps the same rounded-square shape.
+	rowButtonCorner = 9,
+	-- Each button is a slab of the outline colour with a lighter face on top.
+	-- The face is inset by rowButtonOutline on the top and sides but by
+	-- rowButtonDepth along the bottom, so the slab shows as a thin dark
+	-- outline with a heavier lip underneath -- the same extruded "3D" look
+	-- as the shop headers and Buy buttons, at button scale.
+	rowButtonOutlineColor = Theme.color.hudOutline,
+	rowButtonOutline = 2,
+	rowButtonDepth = 5,
+	-- Every slate face shares the cash banner's gradient and lattice; only the
+	-- rings tell them apart. The plus button's 48px tile rather than the
+	-- panel's 86, for the same reason: these faces are about as small.
+	rowButtonGradientRotation = 90,
+	rowButtonGradient = ColorSequence.new(Theme.color.hudFillTop, Theme.color.hudFillBottom),
+	rowButtonTileSize = UDim2.fromOffset(48, 48),
+	rowButtonTileTransparency = 0.7,
+	-- 2, matching the outline under it and the cash banner's and plus button's
+	-- rims, so every edge in the HUD carries the same weight.
+	rowButtonRingThickness = 2,
+	-- Shop's ring is white because its rainbow gradient multiplies against it.
+	shopRingColor = Theme.color.white,
+	-- Cyan against the orange paw.
+	petsRingColor = Color3.fromRGB(0, 147, 198),
+	-- Gold, after the bag's brass clasp.
+	inventoryRingColor = Color3.fromRGB(214, 170, 36),
+	-- The cash panel's own outline grey. Quiet by design: it is the only ring
+	-- that does not name a colour of its icon, and the gear is the one button
+	-- here that is not a place to spend money.
+	settingsRingColor = Theme.color.strokeGrey,
+
+	-- The bag art fills less of its 512 canvas than the others (356x307), so
+	-- at 1:1 it reads visibly smaller beside the shop, paw and gear. At 1.15
+	-- it lands near 35x30 in a 44px button, in line with them.
 	inventoryIconScale = 1.15,
 
-	settingsSize = UDim2.new(0, 58, 0, 44),
-	settingsPosition = UDim2.new(0, 0, 0, 116),
-	settingsColor = Theme.color.buttonDark,
-	settingsCorner = 12,
-	-- A second UICorner is applied after this one; see MainHUDBuilder.
-	settingsCornerDuplicate = 8,
-	settingsStrokeThickness = 2,
-	settingsStrokeTransparency = 0.25,
-	settingsStrokeColor = Theme.color.strokeGrey,
-	settingsFont = Theme.font.heading,
-	settingsTextSize = 30,
-	settingsTextColor = Theme.color.white,
-	settingsStrokeTextTransparency = 0,
-	settingsIconSize = UDim2.new(0, 58, 0, 44),
+	-- ShopButton's spinning rainbow outline. Rotation is tweened 0 -> 360 once
+	-- per period, on a loop.
+	shopRainbow = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
+		ColorSequenceKeypoint.new(0.17, Color3.fromRGB(255, 200, 0)),
+		ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0, 255, 80)),
+		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 220, 255)),
+		ColorSequenceKeypoint.new(0.67, Color3.fromRGB(60, 100, 255)),
+		ColorSequenceKeypoint.new(0.83, Color3.fromRGB(220, 60, 255)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0)),
+	}),
+	shopRainbowPeriod = 3,
 
-	quickSize = UDim2.new(0, 58, 0, 44),
-	quickY = 116,
-	quickShopX = 66,
-	quickPetsX = 132,
-	quickColor = Theme.color.buttonDark,
-	quickCorner = 8,
-	quickStrokeThickness = 2,
-	quickStrokeTransparency = 0.25,
-	quickStrokeColor = Theme.color.strokeGrey,
-	quickFont = Theme.font.heading,
-	quickTextSize = 8,
-	quickTextColor = Theme.color.white,
-	quickStrokeTextTransparency = 0,
+	-- "SALE!" tilted over ShopButton's top-left corner. Centred 10px in and 2px
+	-- down from that corner, so it overhangs the button by about 10px left and
+	-- 7px up, and stops short of the storefront's door.
+	saleBadgeSize = UDim2.new(0, 40, 0, 18),
+	saleBadgePosition = UDim2.new(0, 10, 0, 2),
+	saleBadgeRotation = -12,
+	saleBadgeColor = Color3.fromRGB(255, 80, 60),
 }
 
 --=============================================================== settings panel

@@ -40,6 +40,39 @@ local function stroke(thickness, transparency, color, parent, name)
 	}, parent)
 end
 
+-- A stroke drawn around the object's edge. Border, not the default Contextual,
+-- which on a TextButton outlines the TEXT -- and the row buttons have none,
+-- so their strokes would never show. position picks whether the stroke sits
+-- outside, across or inside that edge.
+local function borderStroke(thickness, color, position, parent)
+	local s = stroke(thickness, 0, color, parent)
+	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	s.BorderStrokePosition = position
+	return s
+end
+
+-- The lattice texture laid over a surface, as a TileLayer child. inset pulls
+-- it in from every edge: negative to reach past the parent's UIPadding, which
+-- shrinks even scale sizes, and positive to stop short of an Inner ring, which
+-- the layer would otherwise draw over (children render above their parent's
+-- stroke). Its own UICorner masks the square tiles to the rounded shape.
+local function tileLayer(parent, tileSize, transparency, cornerRadius, inset)
+	local layer = new("ImageLabel", {
+		Name = "TileLayer",
+		Image = Theme.asset.latticeTile,
+		ScaleType = Enum.ScaleType.Tile,
+		TileSize = tileSize,
+		ImageColor3 = Color3.fromRGB(0, 0, 0),
+		ImageTransparency = transparency,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -2 * inset, 1, -2 * inset),
+		Position = UDim2.fromOffset(inset, inset),
+		ZIndex = 1,
+	}, parent)
+	corner(cornerRadius, layer)
+	return layer
+end
+
 local function padding(top, bottom, left, right, parent)
 	return new("UIPadding", {
 		PaddingTop = UDim.new(0, top),
@@ -279,18 +312,29 @@ local function buildCashHUDGroup(gui)
 		ZIndex = 1,
 	}, gui)
 
+	-- White because UIGradient multiplies against BackgroundColor3; the
+	-- gradient alone sets the colour.
 	local cashPanel = new("Frame", {
 		Name = "CashPanel",
 		Size = T.cashPanelSize,
 		Position = T.cashPanelPosition,
-		BackgroundColor3 = T.cashPanelBackground,
+		BackgroundColor3 = Theme.color.white,
 		BorderSizePixel = 0,
 		ZIndex = 2,
 	}, group)
 	corner(T.cashPanelCorner, cashPanel)
+	-- A Frame's stroke defaults to its border, drawn outside the edge, so the
+	-- texture never reaches under it.
 	stroke(T.cashPanelStrokeThickness, T.cashPanelStrokeTransparency, T.cashPanelStrokeColor, cashPanel)
+	new("UIGradient", {
+		Rotation = T.cashPanelGradientRotation,
+		Color = T.cashPanelGradient,
+	}, cashPanel)
 	padding(T.cashPanelPadding, T.cashPanelPadding, T.cashPanelPadding, T.cashPanelPadding, cashPanel)
+	-- Inset by minus the padding, so it reaches the panel's real edges.
+	tileLayer(cashPanel, T.cashPanelTileSize, T.cashPanelTileTransparency, T.cashPanelCorner, -T.cashPanelPadding)
 
+	-- ZIndex 2 keeps the number above the TileLayer it shares the panel with.
 	local cashLabel = new("TextLabel", {
 		Name = "CashLabel",
 		Size = T.cashLabelSize,
@@ -298,158 +342,228 @@ local function buildCashHUDGroup(gui)
 		AnchorPoint = Vector2.new(0, 0.5),
 		BackgroundTransparency = 1,
 		LayoutOrder = 2,
+		ZIndex = 2,
 		Text = "$0",
 		TextColor3 = T.cashLabelColor,
 		Font = T.cashLabelFont,
 		TextSize = T.cashLabelTextSize,
 		TextXAlignment = Enum.TextXAlignment.Left,
-		TextStrokeTransparency = T.cashLabelStrokeTransparency,
+	}, cashPanel)
+	-- Left on stroke()'s default (Contextual) deliberately: on a text object
+	-- that outlines the glyphs, which is the point here.
+	stroke(T.cashLabelOutlineThickness, 0, T.cashLabelOutlineColor, cashLabel)
+
+	-- The extruded plus button. PlusBase and PlusButton are SIBLINGS inside
+	-- the wrapper: a child always draws above its parent, so a base parented
+	-- to the face would cover it. The wrapper is plusDepth taller than the
+	-- button and is what gets centred, so face and base together sit in the
+	-- middle of the panel. ZIndex 2 keeps the whole button above the TileLayer.
+	local plusWrapper = new("Frame", {
+		Name = "PlusWrapper",
+		Size = T.plusSize + UDim2.fromOffset(0, T.plusDepth),
+		Position = T.plusPosition,
+		AnchorPoint = Vector2.new(1, 0.5),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		LayoutOrder = 3,
+		ZIndex = 2,
 	}, cashPanel)
 
+	local plusBase = new("Frame", {
+		Name = "PlusBase",
+		Size = T.plusSize,
+		Position = UDim2.fromOffset(0, T.plusDepth),
+		BackgroundColor3 = Theme.color.white,
+		BorderSizePixel = 0,
+		ZIndex = 2,
+	}, plusWrapper)
+	corner(T.plusCorner, plusBase)
+	new("UIGradient", {
+		Rotation = T.plusGradientRotation,
+		Color = T.plusBaseGradient,
+	}, plusBase)
+
+	-- Anchored at its top centre, so ButtonHoverEffect's grow spreads evenly
+	-- left and right over the base instead of only to the right. Text is
+	-- empty because the TileLayer child would cover the button's own text;
+	-- the "+" is the PlusLabel above the tiles instead.
 	local plusButton = new("TextButton", {
 		Name = "PlusButton",
 		Size = T.plusSize,
-		Position = T.plusPosition,
-		AnchorPoint = Vector2.new(1, 0.5),
-		BackgroundColor3 = T.plusColor,
-		BorderSizePixel = 0,
-		LayoutOrder = 3,
-		Text = "+",
-		TextColor3 = T.plusTextColor,
-		Font = T.plusFont,
-		TextSize = T.plusTextSize,
-		TextStrokeTransparency = T.plusStrokeTransparency,
-	}, cashPanel)
-	corner(T.plusCorner, plusButton)
-
-	-- TextSize/TextStroke/RichText below have no visible effect while Text is
-	-- empty, but are reproduced so the instance matches the binary exactly.
-	local teleportButton = new("TextButton", {
-		Name = "TeleportToTycoonButton",
-		Size = T.teleportSize,
-		Position = T.teleportPosition,
+		Position = UDim2.fromScale(0.5, 0),
 		AnchorPoint = Vector2.new(0.5, 0),
-		BackgroundColor3 = T.teleportColor,
-		BorderSizePixel = 0,
-		ZIndex = 3,
-		Text = "",
-		TextColor3 = T.teleportTextColor,
-		Font = T.teleportFont,
-		TextSize = T.teleportTextSize,
-		TextStrokeTransparency = T.teleportStrokeTextTransparency,
-		TextWrapped = true,
-		RichText = true,
-	}, group)
-	corner(T.teleportCorner, teleportButton)
-	stroke(T.teleportStrokeThickness, T.teleportStrokeTransparency, T.teleportStrokeColor, teleportButton, "AccentStroke")
-
-	-- Spec described this as "0.475 -> 1 (blue -> green-ish)" with six
-	-- transparency keypoints. The binary has two green keypoints and a fully
-	-- opaque transparency sequence; 0.475 was the first colour's red channel.
-	new("UIGradient", {
-		Rotation = T.teleportGradientRotation,
-		Color = T.teleportGradient,
-	}, teleportButton)
-
-	new("ImageLabel", {
-		Size = UDim2.new(1, 0, 1, 0),
-		BackgroundTransparency = 1,
-		Image = Theme.asset.teleportIcon,
-		ScaleType = Enum.ScaleType.Fit,
-	}, teleportButton)
-
-	-- Placed from the house button's own Position plus one button width and
-	-- the gap, rather than a fixed scale, so it follows if the house moves.
-	-- Shape, size, corner, stroke weight and ZIndex all mirror the house
-	-- button; see Theme.cashHud for why its background is white.
-	local teleportPosition = T.teleportPosition
-	local inventoryButton = new("TextButton", {
-		Name = "InventoryButton",
-		Size = T.teleportSize,
-		Position = UDim2.new(
-			teleportPosition.X.Scale,
-			teleportPosition.X.Offset + T.teleportSize.X.Offset + T.inventoryGap,
-			teleportPosition.Y.Scale,
-			teleportPosition.Y.Offset
-		),
-		AnchorPoint = Vector2.new(0.5, 0),
-		BackgroundColor3 = T.inventoryColor,
-		BorderSizePixel = 0,
-		ZIndex = 3,
-		Text = "",
-	}, group)
-	corner(T.teleportCorner, inventoryButton)
-	stroke(T.teleportStrokeThickness, T.teleportStrokeTransparency, T.inventoryStrokeColor, inventoryButton, "AccentStroke")
-
-	new("UIGradient", {
-		Rotation = T.teleportGradientRotation,
-		Color = T.inventoryGradient,
-	}, inventoryButton)
-
-	-- Scaled past the button's bounds to match the house icon's apparent size;
-	-- centred so it grows evenly in every direction.
-	new("ImageLabel", {
-		Size = UDim2.fromScale(T.inventoryIconScale, T.inventoryIconScale),
-		Position = UDim2.fromScale(0.5, 0.5),
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		BackgroundTransparency = 1,
-		Image = Theme.asset.inventoryIcon,
-		ScaleType = Enum.ScaleType.Fit,
-	}, inventoryButton)
-
-	local settingsButton = new("TextButton", {
-		Name = "SettingsButton",
-		Size = T.settingsSize,
-		Position = T.settingsPosition,
-		BackgroundColor3 = T.settingsColor,
-		BorderSizePixel = 0,
-		ZIndex = 2,
-		Text = "⚙",
-		TextColor3 = T.settingsTextColor,
-		Font = T.settingsFont,
-		TextSize = T.settingsTextSize,
-		TextStrokeTransparency = T.settingsStrokeTextTransparency,
-		TextWrapped = true,
-	}, group)
-	corner(T.settingsCorner, settingsButton)
-	stroke(T.settingsStrokeThickness, T.settingsStrokeTransparency, T.settingsStrokeColor, settingsButton)
-	-- Second UICorner is a leftover from an earlier fix; kept so the tree
-	-- matches the binary. Roblox applies only one, so it has no visual effect.
-	corner(T.settingsCornerDuplicate, settingsButton)
-
-	new("ImageLabel", {
-		Size = T.settingsIconSize,
 		BackgroundColor3 = Theme.color.white,
-		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		Image = Theme.asset.settingsIcon,
-		ScaleType = Enum.ScaleType.Stretch,
-	}, settingsButton)
+		ZIndex = 3,
+		Text = "",
+	}, plusWrapper)
+	corner(T.plusCorner, plusButton)
+	new("UIGradient", {
+		Rotation = T.plusGradientRotation,
+		Color = T.plusFaceGradient,
+	}, plusButton)
+	-- Inner, so the rim stays within the face's 32px and the base below shows
+	-- at the same width; Outer would make the face 6px wider than its base.
+	borderStroke(T.plusStrokeThickness, T.plusStrokeColor, Enum.BorderStrokePosition.Inner, plusButton)
+	tileLayer(plusButton, T.plusTileSize, T.plusTileTransparency, T.plusCorner - T.plusStrokeThickness, T.plusStrokeThickness)
 
-	local function quickActionButton(name, xOffset, text)
+	local plusLabel = new("TextLabel", {
+		Name = "PlusLabel",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		ZIndex = 2,
+		Text = "+",
+		Font = T.plusFont,
+		TextColor3 = T.plusTextColor,
+		TextScaled = true,
+	}, plusButton)
+	-- Contextual, like the cash number's: outlines the glyph.
+	stroke(T.plusTextOutlineThickness, 0, T.plusTextOutlineColor, plusLabel)
+
+	local outline = T.rowButtonOutline
+	local depth = T.rowButtonDepth
+
+	-- The shared button look, used by the house button and by all four buttons
+	-- in the row below it. The button itself is the dark slab: a thin outline
+	-- on three sides and a heavier lip along the bottom, which is what reads as
+	-- depth. The Face on top carries the fill, and the ring colour is all that
+	-- tells one button from another.
+	local function slabButton(config)
 		local button = new("TextButton", {
-			Name = name,
-			Size = T.quickSize,
-			Position = UDim2.new(0, xOffset, 0, T.quickY),
-			BackgroundColor3 = T.quickColor,
+			Name = config.name,
+			Size = T.rowButtonSize,
+			Position = config.position,
+			AnchorPoint = config.anchorPoint or Vector2.new(0, 0),
+			BackgroundColor3 = T.rowButtonOutlineColor,
 			BorderSizePixel = 0,
-			ZIndex = 2,
-			Text = text,
-			TextColor3 = T.quickTextColor,
-			Font = T.quickFont,
-			TextSize = T.quickTextSize,
-			TextScaled = true,
-			TextStrokeTransparency = T.quickStrokeTextTransparency,
-			TextWrapped = true,
-		}, group)
-		corner(T.quickCorner, button)
-		stroke(T.quickStrokeThickness, T.quickStrokeTransparency, T.quickStrokeColor, button)
-		padding(0, 0, 0, 0, button)
-		return button
+			ClipsDescendants = false,
+			ZIndex = config.zIndex or 2,
+			-- Icon-only; the tooltips name each button.
+			Text = "",
+		}, config.parent)
+		corner(T.rowButtonCorner, button)
+
+		-- Scale plus offset, so the face follows ButtonHoverEffect's Size tween
+		-- while the outline and lip stay fixed pixel widths. ZIndex 0 keeps it
+		-- under the icon and badge it shares the button with.
+		-- White because UIGradient multiplies against BackgroundColor3; the
+		-- gradient alone sets the colour. Faces default to the cash banner's
+		-- slate gradient; the house button passes its own green.
+		local faceCorner = T.rowButtonCorner - outline
+		local face = new("Frame", {
+			Name = "Face",
+			Size = UDim2.new(1, -2 * outline, 1, -(outline + depth)),
+			Position = UDim2.fromOffset(outline, outline),
+			BackgroundColor3 = Theme.color.white,
+			BorderSizePixel = 0,
+			ZIndex = 0,
+		}, button)
+		-- Inset by the outline so its curve runs parallel to the slab's.
+		corner(faceCorner, face)
+		new("UIGradient", {
+			Rotation = config.fillGradientRotation or T.rowButtonGradientRotation,
+			Color = config.fillGradient or T.rowButtonGradient,
+		}, face)
+		-- Inner, so the ring stays on the face and the outline stays visible
+		-- around it.
+		local ring = borderStroke(T.rowButtonRingThickness, config.ringColor, Enum.BorderStrokePosition.Inner, face)
+		-- Inset by the ring, so the tiles stop at its inner edge rather than
+		-- darkening it.
+		if config.tiled then
+			local ringWidth = T.rowButtonRingThickness
+			tileLayer(face, T.rowButtonTileSize, T.rowButtonTileTransparency, faceCorner - ringWidth, ringWidth)
+		end
+
+		-- On the button rather than the face so it keeps its full 44px canvas,
+		-- shifted up to centre on the face instead of the slab. A scale above 1
+		-- grows the art evenly in every direction.
+		new("ImageLabel", {
+			Size = UDim2.fromScale(config.iconScale, config.iconScale),
+			Position = UDim2.new(0.5, 0, 0.5, -(depth - outline) / 2),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			BackgroundTransparency = 1,
+			Image = config.icon,
+			ScaleType = Enum.ScaleType.Fit,
+		}, button)
+		return button, ring
 	end
 
-	local shopButton = quickActionButton("ShopButton", T.quickShopX, "Shop")
-	local petsButton = quickActionButton("PetsButton", T.quickPetsX, "Pets")
+	-- The house button. It fires an action instead of opening a panel, so it
+	-- keeps its place above the cash panel and its green gradient face, where
+	-- the row below shares one slate fill. Only the face and ring differ: the
+	-- dark outline and the lip are the row's, which is what still reads as one
+	-- set of buttons.
+	local teleportButton = slabButton({
+		name = "TeleportToTycoonButton",
+		position = T.teleportPosition,
+		anchorPoint = Vector2.new(0.5, 0),
+		-- Above the cash panel, as it has always been.
+		zIndex = 3,
+		icon = Theme.asset.teleportIcon,
+		iconScale = 1,
+		fillGradient = T.teleportGradient,
+		fillGradientRotation = T.teleportGradientRotation,
+		ringColor = T.teleportRingColor,
+		parent = group,
+	})
+
+	-- The four panel-opening buttons, in one row under the cash panel. Each is
+	-- placed by an explicit Position -- no UIListLayout, which would silently
+	-- override every child's Position. The row is an invisible holder;
+	-- ClipsDescendants stays off so the SALE badge can overhang ShopButton.
+	local row = new("Frame", {
+		Name = "ButtonRow",
+		Size = T.rowSize,
+		Position = T.rowPosition,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ClipsDescendants = false,
+		ZIndex = 2,
+	}, group)
+
+	local function rowButton(name, index, icon, iconScale, ringColor)
+		return slabButton({
+			name = name,
+			position = UDim2.fromOffset(index * T.rowButtonStep, 0),
+			icon = icon,
+			iconScale = iconScale,
+			ringColor = ringColor,
+			-- The cash banner's lattice, so the row and the banner match.
+			tiled = true,
+			parent = row,
+		})
+	end
+
+	local shopButton, shopRing = rowButton("ShopButton", 0, Theme.asset.shopIcon, 1, T.shopRingColor)
+	local petsButton = rowButton("PetsButton", 1, Theme.asset.petsIcon, 1, T.petsRingColor)
+	local inventoryButton =
+		rowButton("InventoryButton", 2, Theme.asset.inventoryIcon, T.inventoryIconScale, T.inventoryRingColor)
+	local settingsButton = rowButton("SettingsButton", 3, Theme.asset.settingsIcon, 1, T.settingsRingColor)
+
+	-- Colours Shop's ring itself, multiplying against its white Color.
+	-- MainHUDController spins it.
+	local shopRainbow = new("UIGradient", {
+		Name = "RainbowGradient",
+		Color = T.shopRainbow,
+	}, shopRing)
+
+	-- A child always draws above its parent, so this covers the button face;
+	-- ZIndex 2 keeps it above the icon it shares the button with.
+	new("TextLabel", {
+		Name = "SaleBadge",
+		Size = T.saleBadgeSize,
+		Position = T.saleBadgePosition,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Rotation = T.saleBadgeRotation,
+		BackgroundTransparency = 1,
+		ZIndex = 2,
+		Text = "SALE!",
+		Font = Theme.font.heading,
+		TextScaled = true,
+		TextColor3 = T.saleBadgeColor,
+		TextStrokeColor3 = Theme.color.white,
+		TextStrokeTransparency = 0,
+	}, shopButton)
 
 	return {
 		group = group,
@@ -457,9 +571,11 @@ local function buildCashHUDGroup(gui)
 		cashLabel = cashLabel,
 		plusButton = plusButton,
 		teleportButton = teleportButton,
+		buttonRow = row,
 		inventoryButton = inventoryButton,
 		settingsButton = settingsButton,
 		shopButton = shopButton,
+		shopRainbow = shopRainbow,
 		petsButton = petsButton,
 	}
 end
@@ -900,6 +1016,7 @@ function MainHUDBuilder.build(gui)
 		settingsButton = cashHud.settingsButton,
 		shopButton = cashHud.shopButton,
 		petsButton = cashHud.petsButton,
+		shopRainbow = cashHud.shopRainbow,
 
 		settings = settings,
 		shop = shop,
