@@ -1,0 +1,16 @@
+{
+  "properties": {
+    "CanBeDropped": false,
+    "ToolTip": "Level 1 Throwable Ball — 10 damage",
+    "TextureContent": "rbxassetid://88293931604253"
+  },
+  "attributes": {
+    "InventoryDisplayName": "Level 1 Throwable Ball",
+    "InventoryIcon": "rbxassetid://88293931604253",
+    "InventoryLevel": 1.0,
+    "ItemId": "ThrowableBall_Level1",
+    "ThrowCooldown": 1.2,
+    "WeaponLevel": 1.0
+  },
+  "className": "Tool"
+}

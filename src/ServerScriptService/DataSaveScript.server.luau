@@ -5,9 +5,9 @@ local TycoonProgressService = require(script.Parent.TycoonProgressService)
 local TutorialProgressService = require(script.Parent.TutorialProgressService)
 local WorkerGiftCooldownService = require(script.Parent.WorkerGiftCooldownService)
 
--- Changing this version intentionally starts every player with a clean save.
--- The old v1 store remains isolated and is no longer loaded or written.
-local DATA_STORE_NAME = "PlayerCashData_v2"
+-- v3 intentionally starts every player with a clean save.
+-- The old v2 store remains isolated and untouched for rollback if needed.
+local DATA_STORE_NAME = "PlayerCashData_v3"
 local playerDataStore = DataStoreService:GetDataStore(DATA_STORE_NAME)
 
 local AUTOSAVE_INTERVAL_SECONDS = 60
@@ -60,12 +60,30 @@ Players.PlayerAdded:Connect(function(player)
 	cash.Value = 0
 	cash.Parent = leaderstats
 
+	local gemData = Instance.new("Folder")
+	gemData.Name = "GemData"
+	gemData.Parent = player
+
+	-- Gems the player is carrying. Earned through gameplay, not yet safe.
+	local gems = Instance.new("IntValue")
+	gems.Name = "Gems"
+	gems.Value = 0
+	gems.Parent = gemData
+
+	-- Gems stored in the bank. Only BankZoneHandler moves gems into this pool.
+	local bankedGems = Instance.new("IntValue")
+	bankedGems.Name = "BankedGems"
+	bankedGems.Value = 0
+	bankedGems.Parent = gemData
+
 	local success, savedData = pcall(function()
 		return playerDataStore:GetAsync(player.UserId)
 	end)
 
 	if success and type(savedData) == "table" then
 		cash.Value = tonumber(savedData.Cash) or 0
+		gems.Value = math.max(0, math.floor(tonumber(savedData.Gems) or 0))
+		bankedGems.Value = math.max(0, math.floor(tonumber(savedData.BankedGems) or 0))
 		player:SetAttribute("SavedUpgradeLevel", tonumber(savedData.UpgradeLevel) or 1)
 	else
 		player:SetAttribute("SavedUpgradeLevel", 1)
@@ -118,6 +136,9 @@ end)
 
 local function getPlayerData(player)
 	local cash = player:FindFirstChild("leaderstats") and player.leaderstats:FindFirstChild("Cash")
+	local gemData = player:FindFirstChild("GemData")
+	local gems = gemData and gemData:FindFirstChild("Gems")
+	local bankedGems = gemData and gemData:FindFirstChild("BankedGems")
 	local plot = getAssignedPlot(player)
 
 	local purchasedItems = {}
@@ -144,6 +165,8 @@ local function getPlayerData(player)
 
 	return {
 		Cash = cash and cash.Value or 0,
+		Gems = gems and gems.Value or 0,
+		BankedGems = bankedGems and bankedGems.Value or 0,
 		UpgradeLevel = upgradeLevel,
 		CentreLevel = centreLevel,
 		PlotColor = serializedPlotColor,

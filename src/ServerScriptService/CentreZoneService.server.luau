@@ -130,12 +130,21 @@ local function setModelPresentation(model, mode, ghostTransparency)
 				descendant.CanTouch = original.CanTouch
 				descendant.CanQuery = original.CanQuery
 				descendant.CastShadow = original.CastShadow
-			elseif mode == "Ghost" and not isCollision then
-				descendant.Transparency = math.max(original.Transparency, ghostTransparency or 0.6)
-				descendant.CanCollide = false
-				descendant.CanTouch = false
-				descendant.CanQuery = false
-				descendant.CastShadow = false
+			elseif mode == "Ghost" then
+				if isCollision then
+					-- Keep invisible collision proxies active whenever the kiosk is visible.
+					descendant.Transparency = 1
+					descendant.CanCollide = original.CanCollide
+					descendant.CanTouch = false
+					descendant.CanQuery = original.CanQuery
+					descendant.CastShadow = false
+				else
+					descendant.Transparency = math.max(original.Transparency, ghostTransparency or 0.6)
+					descendant.CanCollide = false
+					descendant.CanTouch = false
+					descendant.CanQuery = false
+					descendant.CastShadow = false
+				end
 			else
 				descendant.Transparency = 1
 				descendant.CanCollide = false

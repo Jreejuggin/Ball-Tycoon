@@ -68,7 +68,8 @@ function TreadmillTheme.ApplyLocked(model: Instance): number
 		part.Material = Enum.Material.SmoothPlastic
 		part.Transparency = GHOST_TRANSPARENCY
 		part.Anchored = true
-		part.CanCollide = false
+		-- Use only the main treadmill body as collision so decorative details do not snag players.
+		part.CanCollide = part.Name == "Base_Main" or part.Name == "Frame_Main"
 		part.CanTouch = false
 		part.CanQuery = false
 		part.CastShadow = false

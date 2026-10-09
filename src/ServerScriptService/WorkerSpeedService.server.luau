@@ -277,7 +277,8 @@ local function wirePlot(plot, upgrade)
 			applySignPart(part, original, mode)
 		end
 		for part, original in pairs(signCollisionStates) do
-			applySignPart(part, original, purchased and "Purchased" or "Hidden")
+			-- The visible preview and purchased sign both block player movement.
+			applySignPart(part, original, workerPurchased and "Purchased" or "Hidden")
 		end
 
 		local currentData = WorkerSpeedConfig.GetLevel(levelValue.Value)
