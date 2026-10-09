@@ -24,7 +24,7 @@ Welcome! This document explains how the Ball Tycoon repository is organized and 
 
 ## 1. Project Overview
 
-Ball Tycoon is a multiplayer conveyor-based production tycoon built for Roblox. Players claim one of ten plots, route balls through droppers and conveyors, hire workers, upgrade machines, and spend earned Cash at in-world NPC shops. See [README.md](README.md) for the full gameplay overview and [`src/ReplicatedStorage/PROJECT_STATE.luau`](src/ReplicatedStorage/PROJECT_STATE.luau) for a detailed, living architecture document.
+Ball Tycoon is a multiplayer conveyor-based production tycoon built for Roblox. Players claim one of ten plots, route balls through droppers and conveyors, hire workers, upgrade machines, and spend earned Cash at in-world NPC shops. See [README.md](README.md) for the full gameplay overview, [`PROJECT_STATE.md`](PROJECT_STATE.md) for a detailed, living architecture document, and [`TODO.md`](TODO.md) for outstanding work.
 
 This repository is **the source-controlled version of the Roblox project**. The game was originally built directly in Roblox Studio and was migrated into this repo using Rojo's syncback feature (a one-time import, not a routine tool — see [Section 10](#10-robloxrojo-specific-rules)). From this point forward, the files under [`src/`](src) are the source of truth for all scripts, configs, and Rojo-managed instances.
 
@@ -44,8 +44,8 @@ Before contributing, install:
 - **[Git](https://git-scm.com/)** — for version control.
 - **[GitHub access](https://github.com/Jreejuggin/Ball-Tycoon)** — you need to be added as a collaborator (or have fork/PR access) on the `Jreejuggin/Ball-Tycoon` repository.
 - **[Roblox Studio](https://create.roblox.com/)** — for running and play-testing the game.
-- **[Rokit](https://github.com/rojo-rbx/rokit)** — the toolchain manager this project uses to install and pin developer tools (currently just Rojo). Install Rokit itself following the instructions in its README; there's no repo-specific Rokit version to install first.
-- **Rojo** — you do *not* need to install Rojo yourself. Rokit installs the exact pinned version (currently **`7.7.0`**, per [`rokit.toml`](rokit.toml)) for you.
+- **[Rokit](https://github.com/rojo-rbx/rokit)** — the toolchain manager this project uses to install and pin developer tools (currently Rojo and rbxmk). Install Rokit itself following the instructions in its README; there's no repo-specific Rokit version to install first.
+- **Rojo and rbxmk** — you do *not* need to install these yourself. Rokit installs the exact pinned versions (currently Rojo **`7.7.0`** and rbxmk **`0.9.1`**, per [`rokit.toml`](rokit.toml)) for you. rbxmk is only needed for scripted inspection of `.rbxm` files (see the MainHUD notes in PROJECT_STATE §2.8); day-to-day work only uses Rojo.
 - **[Rojo Studio plugin](https://create.roblox.com/store/asset/13916111004/Rojo)** — installed from the Roblox library into Studio. This is what lets Studio connect to your local `rojo serve` session.
 - **A code editor** — VS Code is recommended for editing `.luau` files (syntax highlighting, and pairs well with the Rojo workflow described below). Nothing in the repo hard-requires VS Code specifically, but Rojo-managed scripts should be edited on disk rather than in Studio's built-in script editor (see [Section 5](#5-rojo-development-workflow)).
 
@@ -62,7 +62,7 @@ git clone https://github.com/Jreejuggin/Ball-Tycoon.git
 # 2. Enter the project directory
 cd Ball-Tycoon
 
-# 3. Install the pinned tools (currently just Rojo 7.7.0) with Rokit
+# 3. Install the pinned tools (currently Rojo 7.7.0 and rbxmk 0.9.1) with Rokit
 rokit install
 
 # 4. Verify the installation
@@ -88,7 +88,7 @@ This starts a local server (by default at `localhost:34872`) that watches `src/`
 
 6. **Connect Roblox Studio to the Rojo server.** Open Roblox Studio, open the Rojo plugin panel (installed in the Prerequisites step), and click **Connect** (it should find the locally running `rojo serve` automatically at the default port).
 
-7. **Open the correct development Roblox experience.** Connect the Rojo plugin to a Studio session for the team's **development** place — not the live production Ball Tycoon experience (see [Section 11](#11-production-safety)). Which exact place/experience is the designated development environment is not recorded in this repository; confirm the place URL or place ID with the project maintainer before your first sync.
+7. **Open the correct development Roblox experience.** Connect the Rojo plugin to a Studio session for the team's **development** place — not the live production Ball Tycoon experience (see [Section 11](#11-production-safety)). `default.project.json` lists the place IDs Rojo is allowed to sync into under `servePlaceIds`, and the plugin will refuse to sync into any other place. Which of those is the designated development environment is not recorded in this repository; confirm it with the project maintainer before your first sync.
 
 Once connected, the Studio Explorer should populate under `ReplicatedStorage`, `ServerScriptService`, `ServerStorage`, `StarterGui`, `StarterPlayer`, and `Workspace` with the contents of `src/`.
 
@@ -97,8 +97,9 @@ Once connected, the Studio Explorer should populate under `ReplicatedStorage`, `
 ```
 Ball-Tycoon/
 ├── default.project.json   # Rojo project definition — maps src/ into the Roblox DataModel
-├── rokit.toml              # Toolchain manifest — pins the Rojo version (7.7.0)
-├── .gitignore               # Ignores backups/ and .DS_Store
+├── rokit.toml              # Toolchain manifest — pins Rojo (7.7.0) and rbxmk (0.9.1)
+├── .gitignore               # Ignores backups/, .DS_Store, and sourcemap.json
+├── README.md, CONTRIBUTING.md, GIT_WORKFLOW.md, PROJECT_STATE.md, TODO.md   # Docs
 ├── backups/                 # Local .rbxl place file backups — git-ignored, not synced by Rojo
 └── src/
     ├── ReplicatedStorage/    # → game.ReplicatedStorage
@@ -113,19 +114,19 @@ Ball-Tycoon/
 
 ### What's in each service folder
 
-- **`src/ReplicatedStorage/`** — Shared modules used by both client and server: shop configs (`BallShopConfig`, `CreatureShopConfig`, `TradingPostConfig`, `VaultConfig`, `UpgradeShopConfig`, plus Robux-based `ShopConfig`/`CashPackConfig`), UI helper modules (`ButtonHoverEffect`, `Tooltip`, `PanelManager`, `ShopRowBuilder`, `CashFormat`), RemoteEvents (as `.model.json` files, e.g. `MiddleShopPurchaseEvent.model.json`), shared models (`ConveyorCrate.rbxm`, `LaserDoorTemplate.rbxm`), and `PROJECT_STATE.luau` — the living design-doc module described in the README. Subfolders include `Design/` (UI stylesheets), `Ghosts/`, `ThemeRemotes/`, and `UISoundConfig/`.
+- **`src/ReplicatedStorage/`** — Shared modules used by both client and server: shop configs (`CreatureShopConfig`, `BallShopConfig`, `GearShopConfig`, plus Robux-based `ShopConfig`/`CashPackConfig`, and the dormant `TradingPostConfig`/`VaultConfig`/`UpgradeShopConfig`), the HUD theme modules (`UITheme`, `UITheme_Production`, `UITheme_Prototype`, `UISurface`), UI helper modules (`ButtonHoverEffect`, `Tooltip`, `PanelManager`, `ShopRowBuilder`, `CashFormat`), gameplay configs (`ThrowableBallConfig`, `TutorialConfig`, `VoicelineCatalog`, etc.), RemoteEvents (as `.model.json` files, e.g. `MiddleShopPurchaseEvent.model.json`), and shared models (`ConveyorCrate.rbxm`, `LaserDoorTemplate.rbxm`). Subfolders include `Design/` (UI stylesheets, excluded from sync by `globIgnorePaths`), `Ghosts/`, `ThemeRemotes/`, and `UISoundConfig/`. The living design document lives at the repo root as [`PROJECT_STATE.md`](PROJECT_STATE.md), not in `src/`.
 - **`src/ServerScriptService/`** — Server-only game logic: plot assignment, the economy/purchase handlers, worker services, machine upgrades, and save/load logic (`DataSaveScript.server.luau`). This is server-authoritative code — see the README's note that `leaderstats.Cash` and related progression state live here, not on the client.
 - **`src/ServerStorage/`** — Server-only asset storage: worker templates (`WorkerTemplates/`), machine models (`Machines/`), reusable prefabs (`Templates/`), tools (`Tools/`), saved lighting presets (`SavedLightDesigns/`), and `LegacyAssets/` (scripts/models preserved from before the migration — treat as historical reference, not an active development area, unless you know why you're touching it).
-- **`src/StarterGui/`** — Client UI: `MainHUD.rbxm`, `StatsHUD.rbxm`, `WorldShopPanel.rbxm`, and the base `ScreenGui.rbxm`, stored as binary `.rbxm` models (see extensions note below).
-- **`src/StarterPlayer/`** — `StarterCharacterScripts.rbxm` and `StarterPlayerScripts.rbxm`, each a binary model containing the client-side character/player script trees.
-- **`src/Workspace/`** — Place geometry and world objects: the ten plots (`P1.rbxm`–`P10.rbxm`, structurally identical — see [Section 10](#10-robloxrojo-specific-rules)), the `Hub`, the five `MiddleShops/` NPC shop structures, terrain/baseplate/spawn/camera, and the vendored `MusicGUI/` asset (see below).
+- **`src/StarterGui/`** — Client UI. `MainHUD/` and `TutorialGui/` are directories of loose `.luau` files that build their UI in code. `StatsHUD.rbxm`, the empty base `ScreenGui.rbxm`, and `MainHUD_VisualReference.rbxm` (a disabled, Studio-only copy of the old hand-placed HUD, see PROJECT_STATE §2.8) are binary `.rbxm` models.
+- **`src/StarterPlayer/`** — `StarterCharacterScripts.rbxm` (a binary model) and `StarterPlayerScripts/`, a directory of loose `.client.luau` LocalScripts.
+- **`src/Workspace/`** — Place geometry and world objects: the ten plots (`P1.rbxm`–`P10.rbxm`, structurally identical — see [Section 10](#10-robloxrojo-specific-rules)), the `Hub`, the four `MiddleShops/` structures (Creature, Ball, and Gear shops plus the Bank), terrain/baseplate/spawn/camera, and the vendored `MusicGUI/` asset (see below).
 
 ### File extensions you'll see
 
 - **`.server.luau`** — a Script (runs only on the server). Example: `src/ServerScriptService/DataSaveScript.server.luau`.
 - **`.client.luau`** — a LocalScript (runs only on the client). Example: `src/Workspace/MusicGUI/MusicGUI_Loader/StarterPlayer/StarterPlayerScripts/MusicChangeHandler/init.client.luau`.
-- **`.luau`** (no `.server`/`.client` suffix) — a ModuleScript, e.g. `src/ReplicatedStorage/CashFormat.luau`, or in a couple of cases (`StructurePurchaseService.luau`, `TycoonProgressService.luau`) a plain Script without the suffix convention applied — check the corresponding `.meta.json` if one exists, since Rojo can override the inferred class there.
-- **`.rbxm`** — a binary Roblox model file. Rojo syncs these as opaque instance trees; you cannot meaningfully diff their contents in a text-based code review, so treat changes to `.rbxm` files as "replace the whole object" rather than an editable diff. Most of `StarterGui/`, `StarterPlayer/`, and `Workspace/`'s geometry/UI is stored this way because it was migrated in via syncback rather than authored as loose scripts.
+- **`.luau`** (no `.server`/`.client` suffix) — a ModuleScript, e.g. `src/ReplicatedStorage/CashFormat.luau` or `src/ServerScriptService/TycoonProgressService.luau`. Check the corresponding `.meta.json` if one exists, since Rojo can override the inferred class there.
+- **`.rbxm`** — a binary Roblox model file. Rojo syncs these as opaque instance trees; you cannot meaningfully diff their contents in a text-based code review, so treat changes to `.rbxm` files as "replace the whole object" rather than an editable diff. Most of `Workspace/`'s geometry (including every plot), plus `StatsHUD` and `StarterCharacterScripts`, is stored this way because it was migrated in via syncback rather than authored as loose scripts. Scripts inside a `.rbxm` (e.g. a plot's per-slot buy-pad scripts) don't show up in a text search of the repo.
 - **`.meta.json`** — sidecar metadata for a script or a folder. It can set instance `attributes`/`properties` (e.g. `SpeedUpgradeTreadmillService.meta.json` sets `RolloutScope` and `SprintSpeedIncreasePercent` attributes) or override the instance's Roblox class entirely (e.g. `CreatureShopPlaceholderItem/init.meta.json` sets `"className": "Tool"` so that folder syncs in as a `Tool` instance rather than a `Folder`). Always check for a sibling `.meta.json` before assuming a script or folder syncs in with default properties.
 - **`.model.json`** — used here for RemoteEvents (e.g. `MiddleShopPurchaseEvent.model.json`), a lightweight JSON way to declare a simple instance without a binary model.
 
@@ -158,20 +159,22 @@ Steps to develop and test:
 
 Caveats specific to this project:
 
-- **`.rbxm` files won't show diffs in your editor.** If you need to change something inside one of the pre-migration models (e.g. a plot's geometry, `MainHUD.rbxm`), you'll generally need to make the change in Studio, then re-export just that model — see [Editing `.rbxm` files](#editing-rbxm-files-ui-plot-geometry-etc) below. Don't do this casually; understand what you're touching first, and prefer editing loose `.luau` files whenever the thing you're changing is a script rather than the model itself.
-- **DataStores are live even in Studio testing.** Per the README's dev notes, player progress (Cash, plot ownership, worker hires, upgrades, plot color) is saved via DataStores under the key `PlayerCashData_v2`. If "Enable Studio Access to API Services" is turned on for the place you're testing in, Studio play-sessions will read/write real DataStore data for that place. Make sure you're testing against the designated **development** experience (which should have its own separate DataStore namespace from production) — see [Section 11](#11-production-safety).
+- **`.rbxm` files won't show diffs in your editor.** If you need to change something inside one of the pre-migration models (e.g. a plot's geometry, `StatsHUD.rbxm`), you'll generally need to make the change in Studio, then re-export just that model — see [Editing `.rbxm` files](#editing-rbxm-files-ui-plot-geometry-etc) below. Don't do this casually; understand what you're touching first, and prefer editing loose `.luau` files whenever the thing you're changing is a script rather than the model itself.
+- **DataStores are live even in Studio testing.** Per the README's dev notes, player progress (Cash, Gems, plot progression, worker hires, upgrades, plot color, and more) is saved via DataStores under the key `PlayerCashData_v3`. If "Enable Studio Access to API Services" is turned on for the place you're testing in, Studio play-sessions will read/write real DataStore data for that place. Make sure you're testing against the designated **development** experience (which should have its own separate DataStore namespace from production) — see [Section 11](#11-production-safety).
 - **Plot symmetry:** P1–P10 are meant to be structurally identical. If your change affects plot layout or plot-scoped scripts, it generally needs to be applied consistently across all ten plots, not just the one you were testing in.
 
 ### Editing `.rbxm` files (UI, plot geometry, etc.)
 
-Everything under `src/StarterGui/`, `src/StarterPlayer/`, and most of `src/Workspace/` is stored as binary `.rbxm` files rather than loose scripts (see [Section 4](#4-project-structure)). Each file is one **top-level** instance under its service — e.g. `src/StarterGui/MainHUD.rbxm` becomes `StarterGui.MainHUD`, and anything nested inside it (a button, a frame, a group) lives *inside that same file*, not as its own file. This matters because it changes how you save an edit back to disk.
+Most of `src/Workspace/`, plus `StatsHUD.rbxm` and `StarterCharacterScripts.rbxm`, is stored as binary `.rbxm` files rather than loose scripts (see [Section 4](#4-project-structure)). Each file is one **top-level** instance under its service — e.g. `src/StarterGui/StatsHUD.rbxm` becomes `StarterGui.StatsHUD`, and anything nested inside it (a label, a frame, a script) lives *inside that same file*, not as its own file. This matters because it changes how you save an edit back to disk.
+
+> **MainHUD is not edited this way any more.** It is built in code by `src/StarterGui/MainHUD/MainHUDBuilder.luau`, with every visual value coming from the `UITheme` modules. Change the `.luau` files, not Studio. See PROJECT_STATE §2.8.
 
 Tested, working workflow:
 
 1. Run `rojo serve` and connect Studio to it as usual (Section 5).
 2. Make your edit live in Studio — move a UI element, change a property, tweak geometry, etc. (This is the one case where editing directly in Studio is expected and fine, since the whole point is to capture that edit.)
-3. Figure out which **top-level file** actually owns the thing you changed. If you edited something nested (e.g. `PetsButton` inside `MainHUD > CashHUDGroup`), you need the top-level owner — `MainHUD` — not the nested instance itself.
-4. In the Studio Explorer, right-click that top-level instance → **Save to File** → overwrite the matching file under `src/` (e.g. save `MainHUD` over `src/StarterGui/MainHUD.rbxm`).
+3. Figure out which **top-level file** actually owns the thing you changed. If you edited something nested (e.g. a buy pad inside `P1 > DropperSlots > Slot1`), you need the top-level owner — `P1` — not the nested instance itself.
+4. In the Studio Explorer, right-click that top-level instance → **Save to File** → overwrite the matching file under `src/` (e.g. save `P1` over `src/Workspace/P1.rbxm`). Remember the plot symmetry rule: a change to one plot usually needs to be made to all ten.
    - **Don't** export just the nested sub-instance to its own new file — Rojo would sync it in as a new top-level sibling instance instead of putting it back where it belongs, which silently changes the DataModel hierarchy (and can break script references that expect the old path).
 5. Since `rojo serve` is still watching `src/`, it will immediately try to resync the file you just overwrote back into Studio. Check the Rojo plugin's **View Changes** / sync panel — it should show only the property/instance changes you expect. If it does, the file and Studio now agree and the round-trip worked.
 6. Commit the modified `.rbxm` as usual. Because the diff is opaque, describe what you changed inside it in your commit message and PR description (see [Section 8](#8-pull-request-guidelines)).
@@ -294,7 +297,7 @@ For binary `.rbxm` files, Git cannot show you a textual conflict to resolve line
 - **Don't manually reorganize Rojo-managed files/folders without understanding the hierarchy impact.** Moving a file under `src/` moves the corresponding instance in the Roblox DataModel. Renaming or relocating something like a plot folder, a shop config module, or a service script can break references elsewhere (RemoteEvent lookups, `require()` paths, tag-based lookups) that aren't visible from the file move alone.
 - **Respect plot symmetry.** P1–P10 are intentionally structurally identical; changes to plot layout or plot-scoped logic should be applied consistently across all ten unless you have a specific reason not to.
 - **Treat `src/ServerStorage/LegacyAssets/` as historical, not active.** These are scripts/models preserved from before the Rojo migration; don't build new features on top of them without checking whether they're still in use.
-- **`MusicGUI/` under `Workspace/` is a vendored third-party asset** (per its own `README/` instance and `PROJECT_STATE.luau`). Prefer not to restructure it; if you need to change its behavior, check its own documentation first.
+- **`MusicGUI/` under `Workspace/` is a vendored third-party asset** (per its own `README/` instance and `PROJECT_STATE.md` §2.10). Prefer not to restructure it; if you need to change its behavior, check its own documentation first.
 - **Server-validate everything involving Cash/purchases**, consistent with the existing pattern (e.g. `MiddleShopPurchaseHandler` re-looks-up item costs server-side rather than trusting the client). Don't introduce client-trusting shortcuts even for "just testing" purposes.
 
 ## 11. Production Safety
@@ -328,6 +331,7 @@ Development and testing should always happen in the **development** Roblox exper
 | `rojo serve` | Start the Rojo server from the project root, watching `src/` and serving `default.project.json` for Studio to connect to |
 | `rojo --version` | Confirm which Rojo version is active (should match `rokit.toml`, currently `7.7.0`) |
 | `rojo build -o Ball-Tycoon.rbxl` | Build a standalone `.rbxl` place file from the current `src/` tree, without a live Studio connection (useful for producing a one-off snapshot, e.g. for a manual backup) |
+| `rojo sourcemap --output sourcemap.json --watch` | Keep the git-ignored `sourcemap.json` up to date for editor tooling such as Luau language servers |
 
 `rokit install` (covered in [Section 3](#3-first-time-setup)) isn't a Rojo command itself, but it's what installs the pinned `rojo` binary these commands rely on.
 
