@@ -10,10 +10,9 @@ local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
 local ShopRowBuilder = require(ReplicatedStorage:WaitForChild("ShopRowBuilder"))
 
 -- The panel is built at runtime by MainHUDBuilder, so this can no longer be a
--- LocalScript parented to it. MainHUDController calls this with the panel.
-return function(panel)
-	local itemList = panel:WaitForChild("ItemList")
-
+-- LocalScript parented to it. MainHUDController passes in the row container
+-- straight from the builder's refs, so this never looks it up by name.
+return function(itemList)
 	ShopRowBuilder.buildRows(itemList, ShopConfig, "[Shop]")
 end
 

@@ -24,17 +24,24 @@ local purchaseEvent = ReplicatedStorage:WaitForChild("MiddleShopPurchaseEvent")
 local gui = script.Parent
 local middleShops = Workspace:WaitForChild("MiddleShops")
 
--- Maps each shop to: its panel name in this ScreenGui, its config module in
+-- build() is idempotent, so calling it here is safe regardless of whether
+-- MainHUDController (the other LocalScript in this ScreenGui) got there first.
+-- It hands back named references, so this script never looks a panel, its row
+-- container or its close button up by name.
+local MainHUDBuilder = require(gui:WaitForChild("MainHUDBuilder"))
+local refs = MainHUDBuilder.build(gui)
+
+-- Maps each shop to: its builder ref key, its config module in
 -- ReplicatedStorage, and the path (relative to MiddleShops) to the NPC's
 -- ProximityPrompt.
 --
--- Every entry's panel and config must actually exist: the loop below resolves
--- both with a no-timeout WaitForChild, so a missing one stalls it and leaves
--- the remaining shops unwired. The Bank has a structure in Workspace but no
--- panel yet, so it is deliberately absent.
+-- panelKey indexes MainHUDBuilder's refs rather than naming an instance, so a
+-- redesign can rename or re-parent the panel without touching this table. Each
+-- key must exist in the builder's MIDDLE_SHOPS list. The Bank has a structure
+-- in Workspace but no panel yet, so it is deliberately absent.
 local SHOP_DEFINITIONS = {
 	{
-		panelName = "CreatureShopPanel",
+		panelKey = "creature",
 		configName = "CreatureShopConfig",
 		promptPath = { "CreatureShopStructure", "CreatureShopKeeper", "Body", "InteractPrompt" },
 		promptActionText = "Shop",
@@ -42,7 +49,7 @@ local SHOP_DEFINITIONS = {
 		logPrefix = "[CreatureShop]",
 	},
 	{
-		panelName = "BallShopPanel",
+		panelKey = "ball",
 		configName = "BallShopConfig",
 		promptPath = { "BallShopStructure", "BallShopKeeper", "Body", "InteractPrompt" },
 		promptActionText = "Shop",
@@ -50,7 +57,7 @@ local SHOP_DEFINITIONS = {
 		logPrefix = "[BallShop]",
 	},
 	{
-		panelName = "GearShopPanel",
+		panelKey = "gear",
 		configName = "GearShopConfig",
 		promptPath = { "GearShopStructure", "GearShopKeeper", "Body", "InteractPrompt" },
 		promptActionText = "Shop",
@@ -92,15 +99,16 @@ purchaseEvent.OnClientEvent:Connect(function(success, message)
 end)
 
 for _, definition in ipairs(SHOP_DEFINITIONS) do
-	local panel = gui:WaitForChild(definition.panelName)
+	local shopRefs = refs.middleShops[definition.panelKey]
+	local panel = shopRefs.panel
 	local config = require(ReplicatedStorage:WaitForChild(definition.configName))
 
 	-- Build this shop's rows (wired to a Cash purchase, not Robux) and
 	-- register it in the shared panel system.
-	ShopRowBuilder.buildRows(panel.ItemList, config, definition.logPrefix, makeCashPurchaseHandler(definition.configName))
+	ShopRowBuilder.buildRows(shopRefs.itemList, config, definition.logPrefix, makeCashPurchaseHandler(definition.configName))
 	PanelManager.registerPanel(panel)
 
-	local closeButton = panel.TitleBar.CloseButton
+	local closeButton = shopRefs.closeButton
 	closeButton.MouseButton1Click:Connect(function()
 		PanelManager.closeAll()
 	end)
