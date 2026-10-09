@@ -68,6 +68,9 @@ Theme.asset = {
 	-- alpha channel, so ImageColor3 tints it and ImageTransparency sets its
 	-- strength.
 	latticeTile = "rbxassetid://110211627238517",
+	-- 256x256 tileable diagonal stripes. White RGB with the pattern in the
+	-- alpha channel, so ImageColor3 decides what colour the stripes come out.
+	stripePattern = "rbxassetid://84907664693950",
 }
 
 --=============================================================== shared chrome
@@ -103,6 +106,12 @@ Theme.itemList = {
 	scrollBarThickness = 6,
 	rowSpacing = 10,
 	paddingRight = 10,
+	-- Room for each row's UIStroke, which draws outside the row. 2 covers the
+	-- thickest row stroke in use. paddingRight is larger because it also has to
+	-- clear the scrollbar.
+	paddingLeft = 2,
+	paddingTop = 2,
+	paddingBottom = 2,
 	goldScrollBar = Color3.fromRGB(210, 165, 60),
 	greenScrollBar = Color3.fromRGB(80, 210, 100),
 }
@@ -362,13 +371,101 @@ Theme.healthBar = {
 
 --=============================================================== shop / pets
 
+-- The header shared by all four shop panels (Shop, Ball, Creature, Gear). One
+-- table, referenced from each panel below, so they cannot drift apart. Its key
+-- names match the ones Theme.cashPackPanel uses, because MainHUDBuilder's
+-- texturedTitleBar reads the same shape from both.
+--
+-- Settings and Pets deliberately have no header config, so they keep the flat
+-- transparent bar from Theme.titleBar.
+Theme.shopHeader = {
+	-- Taller than Theme.titleBar's 36, so the radius-20 corners -- which have to
+	-- match the panel's own to sit flush against them -- do not dominate a short
+	-- bar. The cash panel's 44 exactly: with the same bleed below, both banners
+	-- now come out 58px tall, and the X's hover pop (1.08 scale, 4px lift) has
+	-- the bleed to rise into. Each panel's listTopOffset moves with this value.
+	titleBarHeight = 44,
+	-- Matches the panels' padding below, exactly as the cash panel's does: the
+	-- banner escapes the padding to reach the panel's own edges, while its
+	-- contents keep that inset and so line up with the rows underneath.
+	titleBarBleed = 14,
+
+	-- Grey for now, pending a colour decision. Everything but the two gradient
+	-- stops and depthColor is the cash banner's recipe unchanged. A dark slate
+	-- rather than the light grey this started as: light grey sat too close to
+	-- the white outline and the two fought each other.
+	titleBarSurface = {
+		image = Theme.asset.stripePattern,
+		cornerRadius = Theme.panel.cornerRadius,
+		gradientRotation = 90,
+		gradientTop = Color3.fromRGB(86, 92, 104),
+		gradientBottom = Color3.fromRGB(54, 60, 70),
+		strokeColor = Color3.fromRGB(232, 240, 236),
+		strokeThickness = 2,
+		tileSize = UDim2.fromOffset(72, 72),
+		patternColor = Color3.fromRGB(0, 0, 0),
+		patternTransparency = 0.8,
+		depth = 6,
+		depthColor = Color3.fromRGB(31, 34, 41),
+		-- Not clipped, for the same reason the cash banner is not: the X grows
+		-- past the bar on hover and clipping would shave the pop.
+		clipsDescendants = false,
+	},
+
+	titleSize = UDim2.new(1, -48, 1, 0),
+	titlePosition = UDim2.new(0, 0, 0, 0),
+	titleColor = Theme.color.white,
+	titleFont = Theme.font.heading,
+	titleTextSize = 22,
+	titleStrokeTransparency = 0,
+
+	closeSize = UDim2.new(0, 32, 0, 32),
+	closePosition = UDim2.new(1, 0, 0.5, 0),
+	closeColor = Theme.color.closeRed,
+	closeCorner = 9,
+	closeFont = Theme.font.heading,
+	closeTextSize = 18,
+	closeTextColor = Theme.color.white,
+	closeStrokeTransparency = 0,
+
+	-- The cash panel's X exactly, with the radius and tile dropped to suit a
+	-- 32px button rather than its 40px one.
+	closeSurface = {
+		image = Theme.asset.stripePattern,
+		cornerRadius = 9,
+		gradientRotation = 90,
+		gradientTop = Color3.fromRGB(240, 105, 105),
+		gradientBottom = Color3.fromRGB(183, 45, 45),
+		strokeColor = Color3.fromRGB(232, 240, 236),
+		strokeThickness = 2,
+		tileSize = UDim2.fromOffset(32, 32),
+		patternColor = Color3.fromRGB(0, 0, 0),
+		patternTransparency = 0.8,
+		depth = 4,
+		depthColor = Color3.fromRGB(118, 26, 26),
+		clipsDescendants = true,
+		captionText = "X",
+	},
+}
+
 Theme.shopPanel = {
 	size = UDim2.new(0, 380, 0, 420),
 	position = UDim2.new(0.5, 0, 0.5, 0),
-	padding = 0,
+	-- Was 0. Insets the rows from the panel edge the way the cash panel's does,
+	-- and gives Theme.shopHeader's bleed the gap it cancels at the top.
+	padding = 14,
 	closeCorner = 8,
-	listTopOffset = 46,
+
+	-- The cash panel's outline, so the white edges inside have a matching one
+	-- around the panel. Overrides Theme.panel's grey for this panel only.
+	strokeColor = Color3.fromRGB(232, 240, 236),
+	strokeThickness = 2,
+	strokeTransparency = 0,
+	-- 54 rather than 46: titleBarHeight 44 plus the same 10px gap the flat 36px
+	-- bar left behind it. The cash panel's offset exactly.
+	listTopOffset = 54,
 	scrollBarColor = Theme.itemList.goldScrollBar,
+	header = Theme.shopHeader,
 }
 
 Theme.petsPanel = {
@@ -412,12 +509,53 @@ Theme.cashPackPanel = {
 	position = UDim2.new(0.5, 0, 0.5, 0),
 	background = Color3.fromRGB(10, 10, 10),
 	cornerRadius = 20,
-	strokeThickness = 3,
+	strokeThickness = 2,
 	strokeTransparency = 0,
-	strokeColor = Color3.fromRGB(70, 200, 90),
+	strokeColor = Color3.fromRGB(232, 240, 236),
 	padding = 14,
 
+	-- Present only in this theme, so the production theme's TitleBar stays
+	-- flat and transparent. MainHUDBuilder applies a surface only when the key
+	-- exists, which is what keeps the two themes swappable despite differing.
+	titleBarSurface = {
+		image = Theme.asset.stripePattern,
+		-- Matches the panel's own cornerRadius rather than the 14 it had while
+		-- the bar sat inside the padding: the bleed puts the bar's top corners
+		-- exactly on the panel's, so a smaller radius left a dark sliver there.
+		cornerRadius = 20,
+		gradientRotation = 90,
+		gradientTop = Color3.fromRGB(142, 238, 110),
+		gradientBottom = Color3.fromRGB(58, 183, 62),
+		strokeColor = Color3.fromRGB(232, 240, 236),
+		strokeThickness = 2,
+		tileSize = UDim2.fromOffset(72, 72),
+		patternColor = Color3.fromRGB(0, 0, 0),
+		patternTransparency = 0.8,
+
+		-- The extruded "3D" lip along the bottom. depthColor is DERIVED from
+		-- gradientBottom (58,183,62) dropped to roughly half brightness, which
+		-- is how the reference screenshot's banner reads: one shadow shade of
+		-- the same green, not a neutral grey. Tune the pair together -- a depth
+		-- past ~8 starts eating the banner's visible face.
+		depth = 6,
+		depthColor = Color3.fromRGB(30, 108, 36),
+
+		-- Deliberately NOT clipped: the CloseButton grows to 43.2px and lifts
+		-- 4px inside the bar, so clipping here shaved 3.6px off its hover pop.
+		-- The bar's tiles are masked by the PatternLayer's own UICorner
+		-- instead, and the CloseButton clips its own tiles via closeSurface.
+		clipsDescendants = false,
+	},
+
 	titleBarHeight = 44,
+
+	-- How far the TitleBar escapes the panel's UIPadding on the left, right and
+	-- top, so the banner spans the full panel width and fills the gap above it.
+	-- Keep in step with `padding` above; anything else leaves an uneven border.
+	-- The banner ends up titleBarHeight + titleBarBleed tall, and because it
+	-- only grows upward the item list below it does not move.
+	titleBarBleed = 14,
+
 	badgeSize = UDim2.new(0, 40, 0, 40),
 	badgePosition = UDim2.new(0, 0, 0.5, 0),
 	badgeBackground = Theme.color.white,
@@ -442,6 +580,37 @@ Theme.cashPackPanel = {
 	closeTextColor = Theme.color.white,
 	closeStrokeTransparency = 0,
 
+	-- The X button's stripes. No gradient was specified for it, so these two
+	-- reds are DERIVED from the existing closeColor (220,60,60) -- a lighter
+	-- top and darker bottom mirroring how the green gradients are built. Tune
+	-- freely; nothing else depends on them. tileSize is likewise scaled down
+	-- for a 40x40 button rather than copied from the 90x40 Buy button.
+	--
+	-- Clipping is safe here (unlike on the TitleBar): this button's only
+	-- children are the pattern and caption, both fromScale(1,1), so they grow
+	-- with it during the hover tween and never overflow.
+	closeSurface = {
+		image = Theme.asset.stripePattern,
+		cornerRadius = 10,
+		gradientRotation = 90,
+		gradientTop = Color3.fromRGB(240, 105, 105),
+		gradientBottom = Color3.fromRGB(183, 45, 45),
+		strokeColor = Color3.fromRGB(232, 240, 236),
+		strokeThickness = 2,
+		tileSize = UDim2.fromOffset(40, 40),
+		patternColor = Color3.fromRGB(0, 0, 0),
+		patternTransparency = 0.8,
+
+		-- Same extrusion as the banner, shallower because the button is 40px
+		-- tall rather than 58. Derived from gradientBottom (183,45,45) the same
+		-- way the green one is derived from its own.
+		depth = 4,
+		depthColor = Color3.fromRGB(118, 26, 26),
+
+		clipsDescendants = true,
+		captionText = "X",
+	},
+
 	listTopOffset = 54,
 	scrollBarColor = Theme.itemList.greenScrollBar,
 }
@@ -453,8 +622,15 @@ Theme.middleShopPanel = {
 	position = UDim2.new(0.5, 0, 0.5, 0),
 	background = Color3.fromRGB(28, 30, 34),
 	closeCorner = 10,
-	listTopOffset = 46,
+	-- Both match shopPanel's; see the notes there.
+	padding = 14,
+	strokeColor = Color3.fromRGB(232, 240, 236),
+	strokeThickness = 2,
+	strokeTransparency = 0,
+	-- Moves with shopPanel's; see the note there.
+	listTopOffset = 54,
 	scrollBarColor = Theme.itemList.goldScrollBar,
+	header = Theme.shopHeader,
 }
 
 --=============================================================== tooltip
@@ -507,13 +683,40 @@ Theme.row = {
 	priceColor = Theme.color.white,
 	priceStrokeTransparency = 0.4,
 
+	-- As with the cash panel's buySurface: present only in this theme, so the
+	-- production rows keep their plain gradient, their own "BUY" text and no
+	-- pattern layer. The two gradient stops are buyGradient's below, copied
+	-- unchanged -- the texture and the extruded lip are the only additions, the
+	-- green is exactly the green these buttons already had.
+	buySurface = {
+		image = Theme.asset.stripePattern,
+		cornerRadius = 10,
+		gradientRotation = 90,
+		gradientTop = Color3.fromRGB(140, 230, 130),
+		gradientBottom = Color3.fromRGB(50, 160, 60),
+		strokeColor = Color3.fromRGB(232, 240, 236),
+		strokeThickness = 2,
+		tileSize = UDim2.fromOffset(56, 56),
+		patternColor = Color3.fromRGB(0, 0, 0),
+		patternTransparency = 0.8,
+		depth = 4,
+		depthColor = Color3.fromRGB(26, 96, 32),
+		clipsDescendants = true,
+		-- Uppercase, matching the text these buttons render today.
+		captionText = "BUY",
+	},
+
 	buyPosition = UDim2.new(1, -10, 0.5, 0),
 	buySize = UDim2.new(0, 80, 0, 40),
 	buyColor = Color3.fromRGB(70, 190, 80),
 	buyCorner = 10,
 	buyFont = Theme.font.heading,
 	buyTextSize = 18,
-	buyTextColor = Theme.color.white,
+	-- A pale mint rather than flat white, so the word reads as one more shade
+	-- of the button's own green. Pitched above gradientTop (140,230,130) in
+	-- brightness, which together with the black buyStrokeColor is what keeps it
+	-- legible over the dark end of the gradient. One value to tune.
+	buyTextColor = Color3.fromRGB(210, 255, 190),
 	buyStrokeColor = Theme.color.textStroke,
 	buyStrokeTransparency = 0,
 	buyGradientRotation = 90,
@@ -529,9 +732,41 @@ Theme.cashPackRow = {
 	height = 84,
 	background = Color3.fromRGB(18, 22, 18),
 	cornerRadius = 14,
-	strokeColor = Color3.fromRGB(70, 200, 90),
-	strokeThickness = 1.5,
+	strokeColor = Color3.fromRGB(96, 105, 118),
+	strokeThickness = 2,
+	-- Transparency was not specified for the new stroke; keeping the existing
+	-- 0.2 is what makes it read as subtle rather than a hard outline.
 	strokeTransparency = 0.2,
+
+	-- As with titleBarSurface: present only here, so production's Buy buttons
+	-- keep their plain gradient, their own "BUY" text and no pattern layer.
+	buySurface = {
+		image = Theme.asset.stripePattern,
+		cornerRadius = 11,
+		gradientRotation = 90,
+		gradientTop = Color3.fromRGB(158, 243, 120),
+		gradientBottom = Color3.fromRGB(70, 196, 68),
+		strokeColor = Color3.fromRGB(232, 240, 236),
+		strokeThickness = 2,
+		tileSize = UDim2.fromOffset(56, 56),
+		patternColor = Color3.fromRGB(0, 0, 0),
+		patternTransparency = 0.8,
+
+		-- Same extrusion as the banner and the X, derived from this surface's
+		-- own gradientBottom (70,196,68). 4px rather than the banner's 6: these
+		-- are 40px tall, so a deeper lip would crowd the caption.
+		depth = 4,
+		depthColor = Color3.fromRGB(36, 116, 36),
+
+		-- No downside here: the face and the caption are both full-width scale,
+		-- so they grow with the button during the hover tween and never
+		-- overflow.
+		clipsDescendants = true,
+		-- The pattern is a child, and children always render above their
+		-- parent, so it would cover the button's own Text. The caption goes in
+		-- a sibling TextLabel with a higher ZIndex instead.
+		captionText = "Buy",
+	},
 
 	-- Centred in the iconImageSize slot below, so the fallback badge sits where
 	-- the art would have been.
