@@ -1,6 +1,13 @@
 -- StructurePurchaseService
 -- Central server-authoritative controller for every Home Centre structure slot.
 -- Individual StructureBuyPadScript instances only register their own pad here.
+--
+-- Second floor support (two small changes, Home Centre behaviour is unchanged):
+--   1. A StructureSlots folder may also live under any model that has the
+--      StructureGate attribute and an Activated BoolValue (used by SecondFloor).
+--   2. Each structure part remembers its authored Transparency/CanCollide as
+--      attributes, so copies made later still know their real look even after
+--      this service has hidden the original.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -37,6 +44,12 @@ local function getPlayerFromHit(hit)
 	return character and Players:GetPlayerFromCharacter(character) or nil
 end
 
+-- The Home Centre is the original gate. Any other model can opt in with the
+-- StructureGate attribute (the second floor does this).
+local function isStructureGate(instance)
+	return instance.Name == "Centre02_Home" or instance:GetAttribute("StructureGate") == true
+end
+
 function StructurePurchaseService.Wire(pad)
 	if wiredPads[pad] then
 		return
@@ -55,7 +68,7 @@ function StructurePurchaseService.Wire(pad)
 		or not structureSlots
 		or structureSlots.Name ~= "StructureSlots"
 		or not homeCentre
-		or homeCentre.Name ~= "Centre02_Home"
+		or not isStructureGate(homeCentre)
 		or not plot
 	then
 		warn("Invalid Home Centre structure hierarchy for " .. pad:GetFullName())
@@ -82,9 +95,23 @@ function StructurePurchaseService.Wire(pad)
 	for _, descendant in ipairs(plot:GetDescendants()) do
 		if descendant:IsA("BasePart") and descendant:GetAttribute("StructureGroup") == structureGroup.Value then
 			table.insert(targetParts, descendant)
+
+			-- Remember the authored look on the part itself (first time only), so
+			-- copies made after this pad hides the part still know its real look.
+			local originalTransparency = descendant:GetAttribute("OriginalTransparency")
+			if originalTransparency == nil then
+				originalTransparency = descendant.Transparency
+				descendant:SetAttribute("OriginalTransparency", originalTransparency)
+			end
+			local originalCanCollide = descendant:GetAttribute("OriginalCanCollide")
+			if originalCanCollide == nil then
+				originalCanCollide = descendant.CanCollide
+				descendant:SetAttribute("OriginalCanCollide", originalCanCollide)
+			end
+
 			originalProperties[descendant] = {
-				Transparency = descendant.Transparency,
-				CanCollide = descendant.CanCollide,
+				Transparency = originalTransparency,
+				CanCollide = originalCanCollide,
 			}
 		end
 	end
