@@ -9,10 +9,12 @@
 --
 -- Usage:
 --   local UISurface = require(ReplicatedStorage.UISurface)
---   UISurface.applyTexturedSurface(someFrame, Theme.cashPackPanel.titleBarSurface)
+--   UISurface.applyTexturedSurface(someFrame, Theme.shopHeader.titleBarSurface)
 --
--- Applied by the prototype theme to every panel header (the cash panel's and
--- the four shop panels'), their close buttons, and every row's Buy button.
+-- Applied by the prototype theme to the four shop panels' headers, the
+-- purchase panel's tabs, every close button, and every row's Buy button. It
+-- can be re-applied to the same object with a different config, which is how
+-- the purchase panel restyles a tab between active and inactive.
 
 local UISurface = {}
 

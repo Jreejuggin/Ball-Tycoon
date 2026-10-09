@@ -15,8 +15,10 @@ Needed before the game can be released publicly, or blocking a feature that alre
 - [ ] **Add a way to earn Gems.** (High) The Bank (PR #15) works, but no gameplay script ever increments `GemData.Gems`, so there is nothing to deposit. The design for where Gems come from has not been written down yet.
   - Files: `src/ServerScriptService/DataSaveScript.server.luau` (creates `Gems`), `src/ServerScriptService/BankZoneHandler.server.luau`
   - Also decide what "not yet safe" means for carried Gems (the comment beside `Gems` in DataSaveScript), e.g. whether they are lost on death. Nothing implements that yet.
-- [ ] **Wire up Robux purchases.** (High, before release) Replace every `productId = 0` in `ShopConfig` and `CashPackConfig` with real Developer Product IDs, and write a `MarketplaceService.ProcessReceipt` handler on the server. None exists today, so real IDs alone would take players' Robux without granting anything.
-  - Files: `src/ReplicatedStorage/ShopConfig.luau`, `src/ReplicatedStorage/CashPackConfig.luau`, new server script
+- [ ] **Fill in Robux product IDs.** (High, before release) The receipt handler (`PurchaseReceiptService`) now grants cash packs and gem bundles, but every `productId` is still 0. Create the Developer Products and fill in `CashPackConfig` entries and the `PRODUCT_ID_*` constants at the top of `GemConfig`. Gem bundle sizes and prices in `GemConfig` are placeholders too.
+  - Files: `src/ReplicatedStorage/CashPackConfig.luau`, `src/ReplicatedStorage/GemConfig.luau`
+- [ ] **Add grant logic for ShopConfig items before giving them product IDs.** (High, before release) AutoCollect, 2X Cash, Infinite Cash, Mega Dropper and Golden Dropper have no grant code. If their ids are filled in, purchases are left unprocessed with a warning.
+  - Files: `src/ServerScriptService/PurchaseReceiptService.luau`, `src/ReplicatedStorage/ShopConfig.luau`
 - [ ] **Set real prices for plot purchases.** (High, before release) Every centre costs 5 Cash, every Home structure 1, the Coil 1, and the Knockback Plank and Throwable Ball 10. They look like test values. They live as `Price` IntValues inside all ten plot `.rbxm` files (identical across plots today), so any change must be made to P1–P10.
   - Prerequisite: confirm with the team that these are test values.
 
@@ -60,7 +62,8 @@ Possible problems or open questions. Each needs checking before it becomes a fix
 There is no automated test suite. These need manual playtests in the development place.
 
 - [ ] **Multi-player plot reset (PR #16).** (High) With 2+ test accounts: leave and rejoin, and confirm (a) the departing player's progress restores fully, possibly into a different plot, and (b) the next player to take the freed plot gets a completely blank plot, with no leftover structures, balls, or Avatar stations.
-- [ ] **Full save round-trip on `PlayerCashData_v3`.** (High) Confirm every saved field survives a rejoin: Cash, Gems, BankedGems, upgrade level, centre level, structures, Avatar stations (and their re-granted weapons), workers, PurchasedItems, plot color, tutorial step, and gift cooldown.
+- [ ] **Session lock and receipts.** (High) Two Studio servers (or a published test place): join server A, buy something, then quickly join server B. B should wait for A's release (watch for the "Took over" warning if it times out) and load the purchase. Re-send a receipt (test product purchase in Studio) and confirm it isn't granted twice.
+- [ ] **Full save round-trip on `PlayerCashData_v3`.** (High) Confirm every saved field survives a rejoin: Cash, Gems, BankedGems, processed receipts, upgrade level, centre level, structures, Avatar stations (and their re-granted weapons), workers, PurchasedItems, plot color, tutorial step, and gift cooldown.
 - [ ] **DataStore failure path.** (Medium) Simulate a load failure and confirm `DataLoadFailed` blocks saving, the tutorial doesn't replay, and the gift cooldown refuses. See PROJECT_STATE §2.12 and §2.13 for the intended behavior.
 - [ ] **PvP weapons.** (Medium) With 2+ accounts: Knockback Plank and Throwable Ball damage, knockback and ragdoll; the ForceField exemption; cooldowns; behavior across respawn.
 - [ ] **Load test with 10 players.** (Low) Profile worker AI, ball spawning, and the per-plot polling loops (Bank, station pads, centres) with a full server.

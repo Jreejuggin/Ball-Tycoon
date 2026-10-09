@@ -1,7 +1,9 @@
 -- CashPackPanelController
--- Builds one row per entry in ReplicatedStorage.CashPackConfig and wires
--- each Buy button to a real Robux purchase prompt. Mirrors ShopPanelController
--- exactly -- same pattern, same guard for placeholder Developer Product IDs.
+-- Fills both tabs of the purchase panel: one card per entry in
+-- ReplicatedStorage.CashPackConfig (Cash tab) and GemConfig (Gems tab), all
+-- built by createPackRow, and wires each Buy button to a real Robux purchase
+-- prompt. Same guard for placeholder Developer Product IDs as
+-- ShopPanelController. Granting happens server-side in PurchaseReceiptService.
 
 local MarketplaceService = game:GetService("MarketplaceService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -10,12 +12,14 @@ local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 
 local CashPackConfig = require(ReplicatedStorage:WaitForChild("CashPackConfig"))
+local GemConfig = require(ReplicatedStorage:WaitForChild("GemConfig"))
 local ButtonHoverEffect = require(ReplicatedStorage:WaitForChild("ButtonHoverEffect"))
 local Theme = require(ReplicatedStorage:WaitForChild("UITheme"))
 local UISurface = require(ReplicatedStorage:WaitForChild("UISurface"))
 
-local function createPackRow(item, layoutOrder, itemList)
-	local T = Theme.cashPackRow
+-- One purchase card. T is the card style (Theme.cashPackRow or
+-- Theme.gemPackRow); configName only names the config in warnings.
+local function createPackRow(item, layoutOrder, itemList, T, configName)
 
 	local row = Instance.new("Frame")
 	row.Name = item.id .. "Row"
@@ -72,7 +76,7 @@ local function createPackRow(item, layoutOrder, itemList)
 		icon.AnchorPoint = Vector2.new(0, 0.5)
 		icon.Position = T.iconPosition
 		icon.Size = T.iconSize
-		icon.BackgroundColor3 = item.iconColor
+		icon.BackgroundColor3 = item.iconColor or T.iconBackground
 		icon.BorderSizePixel = 0
 		icon.Parent = row
 
@@ -121,20 +125,22 @@ local function createPackRow(item, layoutOrder, itemList)
 	priceLabel.Text = item.priceText
 	priceLabel.Parent = row
 
-	-- "50% OFF!" badge above the Buy button, matching the reference style
-	local discountLabel = Instance.new("TextLabel")
-	discountLabel.Name = "DiscountLabel"
-	discountLabel.AnchorPoint = Vector2.new(1, 0)
-	discountLabel.Position = T.discountPosition
-	discountLabel.Size = T.discountSize
-	discountLabel.BackgroundTransparency = 1
-	discountLabel.Font = T.discountFont
-	discountLabel.TextSize = T.discountTextSize
-	discountLabel.TextColor3 = T.discountColor
-	discountLabel.TextStrokeColor3 = T.discountStrokeColor
-	discountLabel.TextStrokeTransparency = T.discountStrokeTransparency
-	discountLabel.Text = "50% OFF!"
-	discountLabel.Parent = row
+	-- Promo line above the Buy button (e.g. "50% OFF!"), if the style has one.
+	if T.discountText then
+		local discountLabel = Instance.new("TextLabel")
+		discountLabel.Name = "DiscountLabel"
+		discountLabel.AnchorPoint = Vector2.new(1, 0)
+		discountLabel.Position = T.discountPosition
+		discountLabel.Size = T.discountSize
+		discountLabel.BackgroundTransparency = 1
+		discountLabel.Font = T.discountFont
+		discountLabel.TextSize = T.discountTextSize
+		discountLabel.TextColor3 = T.discountColor
+		discountLabel.TextStrokeColor3 = T.discountStrokeColor
+		discountLabel.TextStrokeTransparency = T.discountStrokeTransparency
+		discountLabel.Text = T.discountText
+		discountLabel.Parent = row
+	end
 
 	-- Buy button
 	local buyButton = Instance.new("TextButton")
@@ -188,8 +194,10 @@ local function createPackRow(item, layoutOrder, itemList)
 	buyButton.MouseButton1Click:Connect(function()
 		if not item.productId or item.productId == 0 then
 			warn(string.format(
-				"[CashPack] '%s' has no real Developer Product ID yet. Create one in Creator Dashboard > Monetization > Developer Products, then set productId in CashPackConfig.",
-				item.name
+				"[%s] '%s' has no real Developer Product ID yet. Create one in Creator Dashboard > Monetization > Developer Products, then set its productId in %s.",
+				configName,
+				item.name,
+				configName
 			))
 			return
 		end
@@ -202,11 +210,15 @@ local function createPackRow(item, layoutOrder, itemList)
 end
 
 -- The panel is built at runtime by MainHUDBuilder, so this can no longer be a
--- LocalScript parented to it. MainHUDController passes in the row container
--- straight from the builder's refs, so this never looks it up by name.
-return function(itemList)
+-- LocalScript parented to it. MainHUDController passes in each tab's row
+-- container straight from the builder's refs ({ cash = ..., gems = ... }), so
+-- this never looks one up by name.
+return function(lists)
 	for index, item in ipairs(CashPackConfig) do
-		createPackRow(item, index, itemList)
+		createPackRow(item, index, lists.cash, Theme.cashPackRow, "CashPackConfig")
+	end
+	for index, item in ipairs(GemConfig) do
+		createPackRow(item, index, lists.gems, Theme.gemPackRow, "GemConfig")
 	end
 end
 
