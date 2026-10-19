@@ -8,8 +8,12 @@
 	plot .rbxm files stay untouched.
 
 	It reuses the existing systems instead of replacing them:
-	  * Walls / Glass / Roof / Ceiling Lights are copies of the first floor's own
-	    structure parts, one storey up, sold through StructurePurchaseService.
+	  * All five first-floor centres (Worker, Home, Avatar, Orb, Pet) are copied
+	    one storey up into SecondFloor.CentreSlots, with the same prices, order
+	    and dependencies. SecondFloorCentreService runs their lock/purchase flow.
+	  * The floor-2 Home Centre sells Walls / Glass / Roof / Ceiling Lights from a
+	    single pad through StructureSequenceService, exactly like floor 1. The
+	    structures are copies of floor 1's own parts, one storey up.
 	  * Every purchase is an "Activated" / "UpgradeLevel" value inside the plot,
 	    which TycoonProgressService already saves, restores and resets.
 	  * Accent parts carry the PlotThemeAccent tag, so plot colors apply.
@@ -28,7 +32,6 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local Workspace = game:GetService("Workspace")
 
 local Config = require(ServerScriptService:WaitForChild("SecondFloorConfig"))
-local StructurePurchaseService = require(ServerScriptService:WaitForChild("StructurePurchaseService"))
 local PlotThemeConfig = require(ReplicatedStorage:WaitForChild("PlotThemeConfig"))
 local PurchaseEffectModule = require(ReplicatedStorage:WaitForChild("PurchaseEffectModule"))
 local PurchaseSoundModule = require(ReplicatedStorage:WaitForChild("PurchaseSoundModule"))
@@ -158,8 +161,10 @@ end
 ---------------------------------------------------------------------------
 
 -- Copies every first-floor Walls/Glass/Roof/CeilingLights part one storey up,
--- moved into the floor-2 groups. Copies keep their tags (plot colors) and any
--- lights inside them.
+-- moved into the floor-2 groups. Copies keep their tags (plot colors), any
+-- lights inside them, and the OrigTransparency / OrigCanCollide attributes that
+-- StructureSequenceService reveals them with. They start hidden; that service
+-- shows each group once its floor-2 Home Centre stage is bought.
 local function copyStructureShell(plot, storey, shell)
 	local lift = Vector3.new(0, storey, 0) -- plots are only rotated around Y
 	for _, part in ipairs(plot:GetDescendants()) do
@@ -168,22 +173,21 @@ local function copyStructureShell(plot, storey, shell)
 			local copy = part:Clone()
 			stripScripts(copy)
 			copy:SetAttribute("StructureGroup", group .. Config.GroupSuffix)
-
-			-- Floor 1's pad may already have hidden the original. Restore the
-			-- authored look it remembered, so floor 2 reveals the right state.
-			local transparency = part:GetAttribute("OriginalTransparency")
-			local canCollide = part:GetAttribute("OriginalCanCollide")
-			if transparency ~= nil then
-				copy.Transparency = transparency
+			-- StructureSequenceService restores these from attributes it records
+			-- the first time it hides a part. Record them now, before this copy
+			-- is hidden, so a reveal restores the real values, not the hidden ones.
+			for _, property in ipairs({ "CanTouch", "CanQuery", "CastShadow" }) do
+				if copy:GetAttribute("Orig" .. property) == nil then
+					copy:SetAttribute("Orig" .. property, copy[property])
+				end
 			end
-			if canCollide ~= nil then
-				copy.CanCollide = canCollide
-			end
-			copy:SetAttribute("OriginalTransparency", nil)
-			copy:SetAttribute("OriginalCanCollide", nil)
-
 			copy.Anchored = true
 			copy.CFrame = part.CFrame + lift
+			copy.Transparency = 1
+			copy.CanCollide = false
+			copy.CanTouch = false
+			copy.CanQuery = false
+			copy.CastShadow = false
 			copy.Parent = shell
 		end
 	end
@@ -447,49 +451,183 @@ local function buildFloorPad(padSource, floorTop, parent)
 	return pad
 end
 
--- Floor-2 structure slots, laid out exactly like the Home Centre's so that
--- StructurePurchaseService can run them unchanged.
-local function buildStructureSlots(padSource, floorTop, storey, secondFloor)
+-- What each floor-2 centre copies from its first-floor original: its values,
+-- zone markings and purchase pad. Upgrade stations, furniture, worker hiring and
+-- gift stations stay on floor 1 (see SecondFloorCentreService for why).
+local CENTRE_KEEP = {
+	Activated = true,
+	Price = true,
+	Dependency = true,
+	Order = true,
+	Status = true,
+	LockedReason = true,
+	DisplayName = true,
+	RequiredFolderName = true,
+	ZoneMarkers = true,
+	BuyPad = true,
+}
+
+local function liftParts(root, storey)
+	local lift = Vector3.new(0, storey, 0) -- plots are only rotated around Y
+	if root:IsA("BasePart") then
+		root.CFrame += lift
+	end
+	for _, descendant in ipairs(root:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			descendant.CFrame += lift
+		end
+	end
+end
+
+local function cloneUp(source, storey, parent)
+	local copy = source:Clone()
+	stripScripts(copy)
+	liftParts(copy, storey)
+	copy.Parent = parent
+	return copy
+end
+
+-- Hides everything visible in a centre until SecondFloorCentreService takes
+-- over. Each part's look is recorded first, so it can be restored exactly.
+local function hideCentre(centre)
+	for _, descendant in ipairs(centre:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			if descendant:GetAttribute("SolidTransparency") == nil then
+				descendant:SetAttribute("SolidTransparency", descendant.Transparency)
+			end
+			descendant.Transparency = 1
+			descendant.CanTouch = false
+		elseif descendant:IsA("SurfaceGui") or descendant:IsA("BillboardGui") then
+			descendant.Enabled = false
+		end
+	end
+end
+
+-- Floor-2 Home Centre structures: one central pad, plus one slot per structure
+-- holding its Activated/Price values, the same shape StructureSequenceService
+-- uses on floor 1. Slot pads are data holders only and stay hidden.
+local function buildHomeStructures(firstHome, home, floorTop, storey)
+	local firstSlots = firstHome:FindFirstChild("StructureSlots")
+	local firstPad = firstHome:FindFirstChild("StructureBuyPad")
+	if not (firstSlots and firstPad and firstPad:IsA("BasePart")) then
+		warn("[SecondFloorService] First-floor Home Centre has no structure pad; floor-2 structures not built.")
+		return nil
+	end
+
+	local slots = Instance.new("Folder")
+	slots.Name = "StructureSlots"
+	slots.Parent = home
+
+	for _, slotName in ipairs(Config.HomeStructureSlots) do
+		local source = firstSlots:FindFirstChild(slotName)
+		local group = source and source:FindFirstChild("StructureGroup")
+		local sourcePad = source and source:FindFirstChild("BuyPad")
+		if not (group and sourcePad) then
+			warn("[SecondFloorService] First-floor Home Centre is missing " .. slotName .. "; skipped on floor 2.")
+		else
+			local slot = cloneUp(source, storey, slots)
+			slot.StructureGroup.Value = group.Value .. Config.GroupSuffix
+
+			local pad = slot:FindFirstChild("BuyPad")
+			if pad:IsA("BasePart") then
+				pad.Transparency = 1
+				pad.CanCollide = false
+				pad.CanTouch = false
+				pad.CanQuery = false
+				setBillboardsEnabled(pad, false)
+			end
+
+			local price = pad:FindFirstChild("Price") or Instance.new("IntValue")
+			price.Name = "Price"
+			price.Value = Config.StructurePrice
+			price.Parent = pad
+
+			local activated = pad:FindFirstChild("Activated") or Instance.new("BoolValue")
+			activated.Name = "Activated"
+			activated.Value = false
+			activated.Parent = pad
+		end
+	end
+
+	-- The central pad, moved off the stairwell opening (see config).
+	local pad = firstPad:Clone()
+	stripScripts(pad)
+	local oldCompletion = pad:FindFirstChild("CompletionLabel")
+	if oldCompletion then
+		oldCompletion:Destroy() -- StructureSequenceService builds its own
+	end
+	for _, attribute in ipairs({ "CurrentStructure", "StructurePreviewMode" }) do
+		pad:SetAttribute(attribute, nil)
+	end
+	local position = Config.HomeStructurePadPosition
+	placeLikeSource(pad, firstPad, floorTop, position.X, position.Z, storey)
+	pad.Anchored = true
+	pad.Transparency = 1
+	pad.CanCollide = false
+	pad.CanTouch = false
+	setBillboardsEnabled(pad, false)
+	pad.Parent = home
+
+	home:SetAttribute("CompletionMessage", Config.HomeCompletionMessage)
+	return slots
+end
+
+-- Copies every first-floor centre one storey up. Returns the floor-2
+-- CentreSlots folder and the floor-2 Home Centre's StructureSlots.
+local function buildCentres(plot, floorTop, storey, secondFloor)
+	local firstCentres = plot:FindFirstChild("CentreSlots")
 	local folder = Instance.new("Folder")
-	folder.Name = "StructureSlots"
+	folder.Name = "CentreSlots"
 	folder.Parent = secondFloor
 
-	local pads = {}
-	for _, slotConfig in ipairs(Config.StructureSlots) do
-		local slot = Instance.new("Model")
-		slot.Name = slotConfig.slotName
+	local homeSlots = nil
+	for _, centreName in ipairs(Config.Centres) do
+		local source = firstCentres and firstCentres:FindFirstChild(centreName)
+		if not source then
+			warn(("[SecondFloorService] %s has no first-floor %s; skipped on floor 2."):format(plot.Name, centreName))
+			continue
+		end
 
-		local group = Instance.new("StringValue")
-		group.Name = "StructureGroup"
-		group.Value = slotConfig.group .. Config.GroupSuffix
-		group.Parent = slot
+		local centre = Instance.new("Model")
+		centre.Name = centreName
+		for _, child in ipairs(source:GetChildren()) do
+			if CENTRE_KEEP[child.Name] then
+				cloneUp(child, storey, centre)
+			end
+		end
 
-		local dependency = Instance.new("StringValue")
-		dependency.Name = "Dependency"
-		dependency.Value = slotConfig.dependency
-		dependency.Parent = slot
+		-- Fresh progress: floor 2 restarts at level 1.
+		local activated = centre:FindFirstChild("Activated")
+		if activated then
+			activated.Value = false
+		end
+		local status = centre:FindFirstChild("Status")
+		if status then
+			status.Value = ""
+		end
 
-		local pad = padSource:Clone()
-		stripScripts(pad)
-		pad.Name = "BuyPad"
+		-- The Worker Centre's "row of droppers" requirement becomes a row of cubicles.
+		local required = centre:FindFirstChild("RequiredFolderName")
+		if required and required.Value ~= "" then
+			required.Value = Config.WorkerCentreRequirement
+			local reason = centre:FindFirstChild("LockedReason")
+			if reason then
+				reason.Value = Config.WorkerCentreRequirementText
+			end
+			local requirementText = findChildPath(centre, "ZoneMarkers", "LockOverlay", "LockDisplay", "RequirementText")
+			if requirementText and requirementText:IsA("TextLabel") then
+				requirementText.Text = Config.WorkerCentreRequirementText
+			end
+		end
 
-		local price = pad:FindFirstChild("Price") or Instance.new("IntValue")
-		price.Name = "Price"
-		price.Value = Config.StructurePrice
-		price.Parent = pad
+		if centreName == "Centre02_Home" then
+			homeSlots = buildHomeStructures(source, centre, floorTop, storey)
+		end
 
-		local activated = pad:FindFirstChild("Activated") or Instance.new("BoolValue")
-		activated.Name = "Activated"
-		activated.Value = false
-		activated.Parent = pad
-
-		placeLikeSource(pad, padSource, floorTop, slotConfig.padPosition.X, slotConfig.padPosition.Z, storey)
-		pad.Anchored = true
-		pad.Parent = slot
-		slot.Parent = folder
-		table.insert(pads, pad)
+		hideCentre(centre)
+		centre.Parent = folder
 	end
-	return folder, pads
+	return folder, homeSlots
 end
 
 -- One cubicle above a first-floor dropper slot: desk, monitor, keyboard and
@@ -670,8 +808,6 @@ local function buildSecondFloor(plot)
 
 	local secondFloor = Instance.new("Model")
 	secondFloor.Name = "SecondFloor"
-	-- Lets StructurePurchaseService accept this model as a structure-slot gate.
-	secondFloor:SetAttribute("StructureGate", true)
 
 	-- The floor purchase. Named Activated so TycoonProgressService saves it.
 	local activated = Instance.new("BoolValue")
@@ -696,7 +832,7 @@ local function buildSecondFloor(plot)
 	local rails = buildSafetyRails(floorPart, floorTop, storey, slabFolder)
 
 	local floorPad = buildFloorPad(padSource, floorTop, secondFloor)
-	local secondFloorSlots, structurePads = buildStructureSlots(padSource, floorTop, storey, secondFloor)
+	local _, secondFloorSlots = buildCentres(plot, floorTop, storey, secondFloor)
 
 	local cubicleFolder = Instance.new("Folder")
 	cubicleFolder.Name = "Cubicles"
@@ -708,11 +844,8 @@ local function buildSecondFloor(plot)
 
 	secondFloor.Parent = plot
 
-	-- Wire after parenting, so the service can find the plot and the floor-2 parts.
-	for _, pad in ipairs(structurePads) do
-		StructurePurchaseService.Wire(pad)
-	end
-
+	-- SecondFloorCentreService, StructureSequenceService and
+	-- CubicleWorkstationService wait for this before wiring floor 2.
 	plot:SetAttribute("SecondFloorBuilt", true)
 
 	return {
@@ -809,8 +942,9 @@ local function runPlot(plot, built)
 			-- Hand the roof back as floor 1 left it, but only if floor 1 still
 			-- owns it as purchased; otherwise its own logic keeps it hidden.
 			if built.firstFloorRoofActivated and built.firstFloorRoofActivated.Value then
-				roof.Transparency = roof:GetAttribute("OriginalTransparency") or 0
-				local originalCanCollide = roof:GetAttribute("OriginalCanCollide")
+				-- Same attributes StructureSequenceService reveals the roof with.
+				roof.Transparency = roof:GetAttribute("OrigTransparency") or 0
+				local originalCanCollide = roof:GetAttribute("OrigCanCollide")
 				if originalCanCollide ~= nil then
 					roof.CanCollide = originalCanCollide
 				else

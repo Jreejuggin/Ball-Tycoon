@@ -16,16 +16,34 @@ SecondFloorConfig.StructurePrice = 1
 SecondFloorConfig.CubiclePrice = 1
 SecondFloorConfig.CubicleUpgradePrice = 1
 
--- Structure upgrades restart at level 1 on every floor, in the same chain as the
--- Home Centre. The Laser Door is left out because floor 2's entrance is the
--- staircase. GroupSuffix keeps these groups separate from the first floor's.
-SecondFloorConfig.GroupSuffix = "_F2"
-SecondFloorConfig.StructureSlots = {
-	{ slotName = "Slot_Walls", group = "Walls", dependency = "", padPosition = Vector3.new(-56, 0, -68) },
-	{ slotName = "Slot_Glass", group = "Glass", dependency = "Slot_Walls", padPosition = Vector3.new(-56, 0, -76) },
-	{ slotName = "Slot_Roof", group = "Roof", dependency = "Slot_Glass", padPosition = Vector3.new(-56, 0, -84) },
-	{ slotName = "Slot_CeilingLights", group = "CeilingLights", dependency = "Slot_Roof", padPosition = Vector3.new(-56, 0, -92) },
+-- Floor 2 gets a copy of every first-floor centre, one storey up, with the same
+-- prices, order and dependencies (copied from the first floor at server start).
+-- Progress restarts at level 1: these are separate purchases from floor 1's.
+SecondFloorConfig.Centres = {
+	"Centre01_Worker",
+	"Centre02_Home",
+	"Centre03_Avatar",
+	"Centre04_Orb",
+	"Centre05_Pet",
 }
+
+-- Floor 1's Worker Centre unlocks after a full row of droppers; floor 2's
+-- unlocks after the first row of cubicles (CubicleRowSize, below).
+SecondFloorConfig.WorkerCentreRequirement = "Cubicles"
+SecondFloorConfig.WorkerCentreRequirementText = "Buy a row of cubicles"
+
+-- The floor-2 Home Centre sells its structures from one pad, in this order,
+-- exactly like floor 1 (StructureSequenceService). The Laser Door is left out
+-- because floor 2's entrance is the staircase. GroupSuffix keeps these
+-- structure groups separate from the first floor's.
+SecondFloorConfig.GroupSuffix = "_F2"
+SecondFloorConfig.HomeStructureSlots = { "Slot_Walls", "Slot_Glass", "Slot_Roof", "Slot_CeilingLights" }
+
+-- Floor 1's central structure pad sits right above where the stairwell opens on
+-- floor 2, so floor 2's copy is moved here instead (plot-local X/Z, still
+-- inside the Home Centre zone).
+SecondFloorConfig.HomeStructurePadPosition = Vector3.new(-28, 0, -59.2)
+SecondFloorConfig.HomeCompletionMessage = "All Level 2 Home Upgrades Implemented!"
 
 -- Staircase inside the Home Centre: three flights with two 90-degree turns.
 -- StairOrigin is the corner where flight 1 starts, on the first floor.
