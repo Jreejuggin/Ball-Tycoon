@@ -527,10 +527,10 @@ text content) deliberately stays out of the theme.
   string names which module to return. It currently names
   `UITheme_Prototype`.
 - `UITheme_Production` and `UITheme_Prototype` are full copies, not an
-  override layer. They were byte-identical at PR #18; the gem HUD work on
-  `feature/gem-currency-hud` is in `UITheme_Prototype` only until approved,
-  and MainHUDBuilder now needs its keys, so **switching to Production will
-  error until those blocks are copied across**.
+  override layer. They were byte-identical at PR #18, and again once the
+  approved gem HUD blocks (gem row, gem colours and icon, tabbed purchase
+  panel, gem cards, the cash card's promo text, and the richest banner's
+  corner formula) were copied into Production on `feature/gem-currency-hud`.
 - **Workflow (decided 2026-10-08):** try new looks in
   `UITheme_Prototype`; once approved, copy the changed blocks into
   `UITheme_Production`. Keep both files; don't collapse them into one.

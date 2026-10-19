@@ -42,6 +42,12 @@ Theme.color = {
 
 	cashGreen = Color3.fromRGB(107, 242, 140),
 	accentGreen = Color3.fromRGB(71, 199, 107),
+
+	-- Gems are violet. Green still means "buy / add" on every plus button,
+	-- including the gem one, so these are never used for those.
+	gemLight = Color3.fromHex("#C9A4FF"),
+	gemDeep = Color3.fromHex("#8B4FE8"),
+	gemOutline = Color3.fromHex("#3D1A6B"),
 	gold = Color3.fromRGB(255, 205, 60),
 	mutedGrey = Color3.fromRGB(89, 92, 102),
 }
@@ -71,6 +77,8 @@ Theme.asset = {
 	-- 256x256 tileable diagonal stripes. White RGB with the pattern in the
 	-- alpha channel, so ImageColor3 decides what colour the stripes come out.
 	stripePattern = "rbxassetid://84907664693950",
+	-- The gem icon beside the HUD's gem amount.
+	gemIcon = "rbxassetid://139394514878907",
 }
 
 --=============================================================== shared chrome
@@ -142,29 +150,84 @@ Theme.hudSurface = {
 
 --=============================================================== cash HUD
 
-Theme.cashHud = {
-	groupSize = UDim2.new(0, 190, 0, 160),
-	groupPosition = UDim2.new(-0.013, 20, 0.513, -148),
+-- The currency bar (CashPanel) holds two rows stacked by a UIListLayout: gems
+-- on top, cash below. The cash row keeps the bar's original 36px content
+-- height. The gem row, its text and its plus button are GEM_ROW_SCALE of the
+-- cash row's, so cash stays the dominant row. The bar's height is derived from
+-- the rows; the button row and the group follow it.
+local CASH_PANEL_PADDING = 8
+local CASH_ROW_HEIGHT = 36
+local GEM_ROW_SCALE = 0.78
+local GEM_ROW_HEIGHT = math.round(CASH_ROW_HEIGHT * GEM_ROW_SCALE)
+-- Wide enough that the cash plus's hover lift doesn't reach the gem plus.
+local CURRENCY_ROW_GAP = 6
+local CASH_PANEL_Y = 56
+local CASH_PANEL_HEIGHT = 2 * CASH_PANEL_PADDING + GEM_ROW_HEIGHT + CURRENCY_ROW_GAP + CASH_ROW_HEIGHT
+local BUTTON_ROW_GAP = 8
+local BUTTON_ROW_HEIGHT = 44
+local BUTTON_ROW_Y = CASH_PANEL_Y + CASH_PANEL_HEIGHT + BUTTON_ROW_GAP
 
-	cashPanelSize = UDim2.new(0, 190, 0, 52),
-	cashPanelPosition = UDim2.new(0, 0, 0, 56),
+local CASH_LABEL_TEXT_SIZE = 24
+local PLUS_SIZE = 32
+-- The cash plus sits this far in from the bar's right edge.
+local PLUS_RIGHT_INSET = 8
+local GEM_ICON_SIZE = 24
+local GEM_ICON_X = 4
+local GEM_LABEL_GAP = 4
+local GEM_LABEL_X = GEM_ICON_X + GEM_ICON_SIZE + GEM_LABEL_GAP
+
+Theme.cashHud = {
+	-- MainHUDBuilder anchors the group at its bottom-left corner, so a taller
+	-- bar grows the group upward and the button row keeps its place on screen.
+	-- Y is where the group's bottom edge has always been (-148 + 160).
+	groupSize = UDim2.new(0, 190, 0, BUTTON_ROW_Y + BUTTON_ROW_HEIGHT),
+	groupPosition = UDim2.new(-0.013, 20, 0.513, 12),
+
+	cashPanelSize = UDim2.new(0, 190, 0, CASH_PANEL_HEIGHT),
+	cashPanelPosition = UDim2.new(0, 0, 0, CASH_PANEL_Y),
 	-- Gradient, outline and texture come from Theme.hudSurface.
 	cashPanelCorner = 16,
-	cashPanelPadding = 8,
+	cashPanelPadding = CASH_PANEL_PADDING,
 
-	cashLabelSize = UDim2.new(0, 92, 0, 36),
+	currencyRowGap = CURRENCY_ROW_GAP,
+	cashRowHeight = CASH_ROW_HEIGHT,
+	gemRowHeight = GEM_ROW_HEIGHT,
+
+	-- Positions in the cash row are unchanged from when the row was the whole
+	-- bar: the row is exactly the old padded content area. The label reaches
+	-- to 4px short of the plus button (it starts ~4px in), and MainHUDBuilder
+	-- caps its text at cashLabelTextSize and shrinks it only if a value would
+	-- otherwise run under the button.
+	cashLabelSize = UDim2.new(0, 126, 0, CASH_ROW_HEIGHT),
 	cashLabelPosition = UDim2.new(-0.2744101583957672, 52, 0.5, 0),
 	cashLabelColor = Theme.color.cashGreen,
 	cashLabelFont = Theme.font.heading,
 	-- Outlined with Theme.hudSurface's text outline.
-	cashLabelTextSize = 24,
+	cashLabelTextSize = CASH_LABEL_TEXT_SIZE,
+
+	-- The gem row: icon, amount, then its own green plus. The amount gets the
+	-- cash number's font and outline in gem violet.
+	gemRowScale = GEM_ROW_SCALE,
+	gemIconSize = UDim2.fromOffset(GEM_ICON_SIZE, GEM_ICON_SIZE),
+	gemIconPosition = UDim2.new(0, GEM_ICON_X, 0.5, 0),
+	gemLabelPosition = UDim2.new(0, GEM_LABEL_X, 0.5, 0),
+	gemLabelColor = Theme.color.gemLight,
+	gemLabelFont = Theme.font.heading,
+	gemLabelTextSize = math.round(CASH_LABEL_TEXT_SIZE * GEM_ROW_SCALE),
+
+	-- The gem plus follows the gem number: it sits this far after the digits
+	-- and moves as the number gets longer, so it hugs the amount. The cash plus
+	-- stays put at the bar's right edge, so the two buttons are staggered on
+	-- purpose, not aligned. The gem plus never goes past the cash plus.
+	gemPlusGap = 6,
 
 	-- The plus button is extruded: a lit face over a darker base of the same
 	-- size, plusDepth px lower, both inside a PlusWrapper tall enough to hold
 	-- the two. plusPosition places the wrapper, so face and base together are
-	-- centred in the panel rather than the face alone.
-	plusSize = UDim2.new(0, 32, 0, 32),
-	plusPosition = UDim2.new(1, -8, 0.5, 0),
+	-- centred in the row rather than the face alone. The gem plus is the same
+	-- button scaled by gemRowScale.
+	plusSize = UDim2.new(0, PLUS_SIZE, 0, PLUS_SIZE),
+	plusPosition = UDim2.new(1, -PLUS_RIGHT_INSET, 0.5, 0),
 	plusDepth = 6,
 	plusCorner = 8,
 	plusFaceGradient = ColorSequence.new(Color3.fromRGB(126, 232, 136), Color3.fromRGB(58, 178, 78)),
@@ -205,8 +268,9 @@ Theme.cashHud = {
 	-- ButtonRow: the four panel-opening buttons in one row under the cash
 	-- panel, 44px squares (the house button's size) 4px apart -- 4 * 44 + 3 * 4
 	-- = 188, centred under the 190px panel. The row itself draws nothing.
-	rowSize = UDim2.new(0, 188, 0, 44),
-	rowPosition = UDim2.new(0, 1, 0, 116),
+	-- Its Y follows the bar's height, so the row stays BUTTON_ROW_GAP below it.
+	rowSize = UDim2.new(0, 188, 0, BUTTON_ROW_HEIGHT),
+	rowPosition = UDim2.new(0, 1, 0, BUTTON_ROW_Y),
 
 	rowButtonSize = UDim2.new(0, 44, 0, 44),
 	-- One button plus one gap.
@@ -321,10 +385,12 @@ Theme.richestBanner = {
 	size = UDim2.new(0, 0, 0, RICHEST_BANNER_HEIGHT),
 	position = UDim2.new(0.5, 0, -0.08698859065771103, 12),
 	-- The cash panel's corner scaled to this height (16 at 52px -> 9 at
-	-- 30px), so the two share a shape. Derived rather than copied, so it
-	-- follows if either changes.
+	-- 30px), so the two share a shape. 52 is a single row (cash row plus
+	-- padding), not the whole bar: the bar grew taller when the gem row was
+	-- added, and that must not change the banner.
 	cornerRadius = math.round(
-		Theme.cashHud.cashPanelCorner * RICHEST_BANNER_HEIGHT / Theme.cashHud.cashPanelSize.Y.Offset
+		Theme.cashHud.cashPanelCorner * RICHEST_BANNER_HEIGHT
+			/ (Theme.cashHud.cashRowHeight + 2 * Theme.cashHud.cashPanelPadding)
 	),
 	paddingX = 14,
 	-- Past this fraction of the screen's width the banner stops growing and
@@ -504,25 +570,51 @@ Theme.inventoryPanel = {
 
 --=============================================================== cash pack panel
 
+-- The purchase panel: two tabs (Cash, Gems) above one body. The panel Frame
+-- itself is a transparent container -- it keeps the size and position, and is
+-- what PanelManager shows and hides -- holding the body, the tabs and the X.
+--
+-- The body is neutral slate in both tabs; only the active tab and the cards
+-- carry a currency colour. The active tab sits above the body, clipped at the
+-- body's top edge, so it joins the body with square bottom corners and covers
+-- the body's outline where they meet. The inactive tab is shorter, darker and
+-- drawn behind the body, so the body's edge runs in front of it.
+local TAB_STRIP_HEIGHT = 44
+local TAB_CORNER_RADIUS = 12
+
 Theme.cashPackPanel = {
 	size = UDim2.new(0, 380, 0, 420),
 	position = UDim2.new(0.5, 0, 0.5, 0),
-	background = Color3.fromRGB(10, 10, 10),
+	background = Theme.color.panelDark,
 	cornerRadius = 20,
 	strokeThickness = 2,
 	strokeTransparency = 0,
 	strokeColor = Color3.fromRGB(232, 240, 236),
 	padding = 14,
 
-	-- Present only in this theme, so the production theme's TitleBar stays
-	-- flat and transparent. MainHUDBuilder applies a surface only when the key
-	-- exists, which is what keeps the two themes swappable despite differing.
-	titleBarSurface = {
+	-- Room above the body for the tabs and the X. The body takes the rest.
+	tabStripHeight = TAB_STRIP_HEIGHT,
+	-- The first tab starts where the body's rounded top-left corner ends.
+	tabStartX = 20,
+	tabWidth = 110,
+	tabGap = 6,
+	-- Visible heights above the body. The inactive tab is shorter, so it sits
+	-- lower and reads as recessed.
+	tabActiveHeight = 40,
+	tabInactiveHeight = 32,
+	tabCornerRadius = TAB_CORNER_RADIUS,
+	tabFont = Theme.font.heading,
+	tabTextSize = 20,
+	tabTextColor = Theme.color.white,
+	tabInactiveTextColor = Color3.fromRGB(140, 146, 158),
+	tabTextStrokeTransparency = 0,
+
+	-- Active-tab surfaces. Flat (no depth): an extruded lip would draw a dark
+	-- line right along the edge the tab shares with the body. The cash one is
+	-- the old title bar's green stripes.
+	cashTabSurface = {
 		image = Theme.asset.stripePattern,
-		-- Matches the panel's own cornerRadius rather than the 14 it had while
-		-- the bar sat inside the padding: the bleed puts the bar's top corners
-		-- exactly on the panel's, so a smaller radius left a dark sliver there.
-		cornerRadius = 20,
+		cornerRadius = TAB_CORNER_RADIUS,
 		gradientRotation = 90,
 		gradientTop = Color3.fromRGB(142, 238, 110),
 		gradientBottom = Color3.fromRGB(58, 183, 62),
@@ -531,48 +623,38 @@ Theme.cashPackPanel = {
 		tileSize = UDim2.fromOffset(72, 72),
 		patternColor = Color3.fromRGB(0, 0, 0),
 		patternTransparency = 0.8,
-
-		-- The extruded "3D" lip along the bottom. depthColor is DERIVED from
-		-- gradientBottom (58,183,62) dropped to roughly half brightness, which
-		-- is how the reference screenshot's banner reads: one shadow shade of
-		-- the same green, not a neutral grey. Tune the pair together -- a depth
-		-- past ~8 starts eating the banner's visible face.
-		depth = 6,
-		depthColor = Color3.fromRGB(30, 108, 36),
-
-		-- Deliberately NOT clipped: the CloseButton grows to 43.2px and lifts
-		-- 4px inside the bar, so clipping here shaved 3.6px off its hover pop.
-		-- The bar's tiles are masked by the PatternLayer's own UICorner
-		-- instead, and the CloseButton clips its own tiles via closeSurface.
-		clipsDescendants = false,
+	},
+	gemTabSurface = {
+		image = Theme.asset.stripePattern,
+		cornerRadius = TAB_CORNER_RADIUS,
+		gradientRotation = 90,
+		gradientTop = Theme.color.gemLight,
+		gradientBottom = Theme.color.gemDeep,
+		strokeColor = Color3.fromRGB(232, 240, 236),
+		strokeThickness = 2,
+		tileSize = UDim2.fromOffset(72, 72),
+		patternColor = Color3.fromRGB(0, 0, 0),
+		patternTransparency = 0.8,
+	},
+	-- Either tab while inactive: darker than the body, with the quieter grey
+	-- outline, and no currency colour.
+	inactiveTabSurface = {
+		image = Theme.asset.stripePattern,
+		cornerRadius = TAB_CORNER_RADIUS,
+		gradientRotation = 90,
+		gradientTop = Color3.fromRGB(24, 27, 32),
+		gradientBottom = Color3.fromRGB(15, 17, 21),
+		strokeColor = Theme.color.panelStroke,
+		strokeThickness = 2,
+		tileSize = UDim2.fromOffset(72, 72),
+		patternColor = Color3.fromRGB(0, 0, 0),
+		patternTransparency = 0.9,
 	},
 
-	titleBarHeight = 44,
-
-	-- How far the TitleBar escapes the panel's UIPadding on the left, right and
-	-- top, so the banner spans the full panel width and fills the gap above it.
-	-- Keep in step with `padding` above; anything else leaves an uneven border.
-	-- The banner ends up titleBarHeight + titleBarBleed tall, and because it
-	-- only grows upward the item list below it does not move.
-	titleBarBleed = 14,
-
-	badgeSize = UDim2.new(0, 40, 0, 40),
-	badgePosition = UDim2.new(0, 0, 0.5, 0),
-	badgeBackground = Theme.color.white,
-	badgeCorner = UDim.new(0.5, 0),
-	badgeTextColor = Color3.fromRGB(20, 20, 20),
-	badgeFont = Theme.font.heading,
-	badgeTextSize = 22,
-
-	titleSize = UDim2.new(1, -94, 1, 0),
-	titlePosition = UDim2.new(0, 50, 0, 0),
-	titleColor = Theme.color.white,
-	titleFont = Theme.font.heading,
-	titleTextSize = 26,
-	titleStrokeTransparency = 0,
-
 	closeSize = UDim2.new(0, 40, 0, 40),
-	closePosition = UDim2.new(1, 0, 0.5, 0),
+	-- Right end of the tab strip, centred on its top 40px so it stays 4px
+	-- clear of the body.
+	closePosition = UDim2.new(1, 0, 0, 20),
 	closeColor = Color3.fromRGB(220, 60, 60),
 	closeCorner = 10,
 	closeFont = Theme.font.heading,
@@ -586,9 +668,9 @@ Theme.cashPackPanel = {
 	-- freely; nothing else depends on them. tileSize is likewise scaled down
 	-- for a 40x40 button rather than copied from the 90x40 Buy button.
 	--
-	-- Clipping is safe here (unlike on the TitleBar): this button's only
-	-- children are the pattern and caption, both fromScale(1,1), so they grow
-	-- with it during the hover tween and never overflow.
+	-- Clipping is safe here: this button's only children are the pattern and
+	-- caption, both fromScale(1,1), so they grow with it during the hover
+	-- tween and never overflow.
 	closeSurface = {
 		image = Theme.asset.stripePattern,
 		cornerRadius = 10,
@@ -601,9 +683,8 @@ Theme.cashPackPanel = {
 		patternColor = Color3.fromRGB(0, 0, 0),
 		patternTransparency = 0.8,
 
-		-- Same extrusion as the banner, shallower because the button is 40px
-		-- tall rather than 58. Derived from gradientBottom (183,45,45) the same
-		-- way the green one is derived from its own.
+		-- A shallow extruded lip, derived from gradientBottom (183,45,45) the
+		-- same way the green surfaces derive theirs.
 		depth = 4,
 		depthColor = Color3.fromRGB(118, 26, 26),
 
@@ -611,8 +692,8 @@ Theme.cashPackPanel = {
 		captionText = "X",
 	},
 
-	listTopOffset = 54,
 	scrollBarColor = Theme.itemList.greenScrollBar,
+	gemScrollBarColor = Theme.color.gemDeep,
 }
 
 --=============================================================== middle shops
@@ -809,6 +890,9 @@ Theme.cashPackRow = {
 	priceColor = Theme.color.white,
 	priceStrokeTransparency = 0.4,
 
+	-- The promo line above the Buy button. A card style without discountText
+	-- shows none.
+	discountText = "50% OFF!",
 	discountPosition = UDim2.new(1, -10, 0, 8),
 	discountSize = UDim2.new(0, 90, 0, 16),
 	discountFont = Theme.font.heading,
@@ -832,6 +916,18 @@ Theme.cashPackRow = {
 		ColorSequenceKeypoint.new(1, Color3.fromRGB(50, 160, 60)),
 	}),
 }
+
+-- Gem cards: the cash card's layout, with gem violet in place of the green
+-- accents. The Buy button stays green on purpose (green means "buy"), and so
+-- is shared with the cash card. Bundles have no per-item colour, so the
+-- fallback badge takes iconBackground. No promo line.
+Theme.gemPackRow = table.clone(Theme.cashPackRow)
+Theme.gemPackRow.background = Color3.fromRGB(24, 18, 34)
+Theme.gemPackRow.strokeColor = Theme.color.gemOutline
+Theme.gemPackRow.strokeTransparency = 0
+Theme.gemPackRow.nameColor = Theme.color.gemLight
+Theme.gemPackRow.iconBackground = Theme.color.gemDeep
+Theme.gemPackRow.discountText = nil
 
 Theme.hover = {
 	buyButton = { scale = 1.1, lift = 3 },
