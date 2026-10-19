@@ -155,6 +155,9 @@ Theme.hudSurface = {
 -- height. The gem row, its text and its plus button are GEM_ROW_SCALE of the
 -- cash row's, so cash stays the dominant row. The bar's height is derived from
 -- the rows; the button row and the group follow it.
+-- 6px wider than the original 190, on the right only, so the cash plus (pinned
+-- PLUS_RIGHT_INSET in from that edge) sits 6px further from the number.
+local CASH_PANEL_WIDTH = 196
 local CASH_PANEL_PADDING = 8
 local CASH_ROW_HEIGHT = 36
 local GEM_ROW_SCALE = 0.78
@@ -180,10 +183,10 @@ Theme.cashHud = {
 	-- MainHUDBuilder anchors the group at its bottom-left corner, so a taller
 	-- bar grows the group upward and the button row keeps its place on screen.
 	-- Y is where the group's bottom edge has always been (-148 + 160).
-	groupSize = UDim2.new(0, 190, 0, BUTTON_ROW_Y + BUTTON_ROW_HEIGHT),
+	groupSize = UDim2.new(0, CASH_PANEL_WIDTH, 0, BUTTON_ROW_Y + BUTTON_ROW_HEIGHT),
 	groupPosition = UDim2.new(-0.013, 20, 0.513, 12),
 
-	cashPanelSize = UDim2.new(0, 190, 0, CASH_PANEL_HEIGHT),
+	cashPanelSize = UDim2.new(0, CASH_PANEL_WIDTH, 0, CASH_PANEL_HEIGHT),
 	cashPanelPosition = UDim2.new(0, 0, 0, CASH_PANEL_Y),
 	-- Gradient, outline and texture come from Theme.hudSurface.
 	cashPanelCorner = 16,
@@ -219,7 +222,7 @@ Theme.cashHud = {
 	-- and moves as the number gets longer, so it hugs the amount. The cash plus
 	-- stays put at the bar's right edge, so the two buttons are staggered on
 	-- purpose, not aligned. The gem plus never goes past the cash plus.
-	gemPlusGap = 6,
+	gemPlusGap = 12,
 
 	-- The plus button is extruded: a lit face over a darker base of the same
 	-- size, plusDepth px lower, both inside a PlusWrapper tall enough to hold
@@ -267,7 +270,9 @@ Theme.cashHud = {
 
 	-- ButtonRow: the four panel-opening buttons in one row under the cash
 	-- panel, 44px squares (the house button's size) 4px apart -- 4 * 44 + 3 * 4
-	-- = 188, centred under the 190px panel. The row itself draws nothing.
+	-- = 188. It was centred under the original 190px panel and stays put now
+	-- the panel is 196: the panel only grew rightward, so the row's left edge
+	-- still lines up with it. The row itself draws nothing.
 	-- Its Y follows the bar's height, so the row stays BUTTON_ROW_GAP below it.
 	rowSize = UDim2.new(0, 188, 0, BUTTON_ROW_HEIGHT),
 	rowPosition = UDim2.new(0, 1, 0, BUTTON_ROW_Y),
@@ -928,6 +933,15 @@ Theme.gemPackRow.strokeTransparency = 0
 Theme.gemPackRow.nameColor = Theme.color.gemLight
 Theme.gemPackRow.iconBackground = Theme.color.gemDeep
 Theme.gemPackRow.discountText = nil
+-- The gem art gets one fixed square box, the same on all five cards, as tall
+-- as the cash slot and centred where that slot is, so the badge (iconPosition)
+-- and the name still line up. No zoom: measured from the art, the chest spans
+-- 0.88 of the image across and the sack 0.77 down, so the cash crop window
+-- (0.66 x 0.49) would cut off the top three tiers. At (1, 1) the PNGs'
+-- transparent padding does the centring and nothing is clipped.
+Theme.gemPackRow.iconImageSize = UDim2.fromOffset(72, 72)
+Theme.gemPackRow.iconImagePosition = UDim2.new(0, 16, 0.5, 0)
+Theme.gemPackRow.iconImageCrop = Vector2.new(1, 1)
 
 Theme.hover = {
 	buyButton = { scale = 1.1, lift = 3 },
