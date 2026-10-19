@@ -42,6 +42,8 @@ Planned or partly built work.
 - [ ] **Add a close/skip control to the tutorial's StepPanel.** (Low) Today the only exits are the welcome card's Skip or finishing all nine steps, and a player who opens a shop instead of answering the welcome card is auto-started. See PROJECT_STATE §2.12.
   - Files: `src/StarterGui/TutorialGui/StepPanel.luau`, `TutorialController.luau`
 - [ ] **Decide on the Daily Worker Gifts opening animation.** (Low) Still undecided whether a lid tween on claim is worth building; the feature works without it.
+- [ ] **Consider replacing the Gems tab's bundle images.** (Low) The five gem pack icons work, but we may want different art. Swapping them only means changing `iconAssetId` in `GemConfig`. The cards show every image in one 72px square box with no zoom, so new art should stay square with the pile centred. If its transparent padding differs much from the current set, re-check the `gemPackRow` icon keys (in both theme files) so nothing is clipped or tiny.
+  - Files: `src/ReplicatedStorage/GemConfig.luau`, `src/ReplicatedStorage/UITheme_Prototype.luau` / `UITheme_Production.luau` (`Theme.gemPackRow`)
 
 ## 3. Needs Investigation
 
