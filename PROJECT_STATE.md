@@ -512,7 +512,9 @@ in each config, no other code changes needed.
     `Theme.cashPackRow` (with the "50% OFF!" promo line, now
     `discountText`) or `Theme.gemPackRow` (the cash card's layout with
     violet accents, no promo line, same green Buy button).
-- PetsPanel: placeholder with "Soon" pills — still not functional
+- PetsPanel: placeholder with "Soon" pills — still not functional, and no
+  longer reachable: the pets button now opens the Creature Shop panel (the
+  same one the NPC's prompt opens), so creatures can be bought from anywhere.
 - InventoryPanel: placeholder with an empty content area (added in PR #18)
 - CreatureShopPanel / BallShopPanel / GearShopPanel: the MiddleShops panels
   — see section 2.4b
@@ -1108,7 +1110,7 @@ are about them.
 - **Ball and Gear Shop items:** only increment the PurchasedItems counter; no physical item is granted. GearShopConfig's items themselves are placeholder content, not just their prices.
 - **MiddleShops item prices:** placeholder Cash costs in CreatureShopConfig/BallShopConfig/GearShopConfig (and the dormant TradingPost/Vault/UpgradeShop configs).
 - **Very low in-plot prices:** centres cost 5, Home structures 1, the Coil 1, and the Knockback Plank and Throwable Ball 10 (identical on all ten plots). They look like test values (section 2.14).
-- **PetsPanel and InventoryPanel:** placeholders. The Pets panel shows "Soon" pills; the Inventory panel is empty.
+- **PetsPanel and InventoryPanel:** placeholders. The Pets panel shows "Soon" pills and nothing opens it any more (the pets button opens the Creature Shop); the Inventory panel is empty.
 - **Orb and Pet centres:** unlockable but empty (section 2.14).
 - **Daily Worker Gifts reward is a placeholder:** `PLACEHOLDER_GIFT_REWARD_CASH = 150` in WorkerNotesGiftsStationService. Swapping in the real reward is a one-line change.
 - **Daily Worker Gifts opening animation:** not built, and it's still undecided whether to build it. The claim flow is complete and functional without it (section 2.13).

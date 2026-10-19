@@ -51,6 +51,10 @@ local shopCloseButton = refs.shop.closeButton
 local petsButton = refs.petsButton
 local petsPanel = refs.pets.panel
 local petsCloseButton = refs.pets.closeButton
+-- The pets button opens the Creature Shop, the same panel as the NPC's prompt.
+-- MiddleShopsController fills and registers it; PanelManager is shared, so
+-- toggling it from here needs nothing more.
+local creatureShopPanel = refs.middleShops.creature.panel
 
 local inventoryButton = refs.inventoryButton
 local inventoryPanel = refs.inventory.panel
@@ -141,7 +145,7 @@ shopButton.MouseButton1Click:Connect(function()
 
 end)
 petsButton.MouseButton1Click:Connect(function()
-	togglePanel(petsPanel)
+	togglePanel(creatureShopPanel)
 end)
 inventoryButton.MouseButton1Click:Connect(function()
 	togglePanel(inventoryPanel)
