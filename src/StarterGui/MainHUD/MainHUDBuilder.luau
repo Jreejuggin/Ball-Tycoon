@@ -125,6 +125,13 @@ local function outlineText(label, thickness)
 	)
 end
 
+-- Draws the label at maxSize, shrinking only when the text would not fit its
+-- box. Used on the HUD's currency amounts so a huge value stays inside its row.
+local function capTextSize(label, maxSize)
+	label.TextScaled = true
+	return new("UITextSizeConstraint", { MaxTextSize = maxSize }, label)
+end
+
 local function padding(top, bottom, left, right, parent)
 	return new("UIPadding", {
 		PaddingTop = UDim.new(0, top),
@@ -203,15 +210,57 @@ local function titleBar(parent, titleText, closeRadius, barLayoutOrder, titleBor
 	return bar, close
 end
 
+-- A panel's X button, from a header config H (closeSize, closePosition,
+-- closeColor, closeCorner, closeFont, closeTextSize, closeTextColor,
+-- closeStrokeTransparency, and optionally closeSurface). Anchored at its
+-- right-centre, so closePosition places its right edge.
+local function closeButton(parent, H)
+	local close = new("TextButton", {
+		Name = "CloseButton",
+		Size = H.closeSize,
+		Position = H.closePosition,
+		AnchorPoint = Vector2.new(1, 0.5),
+		BackgroundColor3 = H.closeColor,
+		BorderSizePixel = 0,
+		Text = "X",
+		TextColor3 = H.closeTextColor,
+		Font = H.closeFont,
+		TextSize = H.closeTextSize,
+		TextStrokeTransparency = H.closeStrokeTransparency,
+	}, parent)
+	corner(H.closeCorner, close)
+
+	-- The pattern is a child, and children always render above their parent, so
+	-- it would cover the button's own Text. The caption moves into a sibling
+	-- label with a higher ZIndex instead.
+	if H.closeSurface then
+		UISurface.applyTexturedSurface(close, H.closeSurface)
+		close.Text = ""
+		new("TextLabel", {
+			Name = "Caption",
+			-- Short by the lip, so the X centres on the lit face, not the slab.
+			Size = UDim2.new(1, 0, 1, -(H.closeSurface.depth or 0)),
+			BackgroundTransparency = 1,
+			Text = H.closeSurface.captionText,
+			TextColor3 = H.closeTextColor,
+			Font = H.closeFont,
+			TextSize = H.closeTextSize,
+			TextStrokeTransparency = H.closeStrokeTransparency,
+			ZIndex = 2,
+		}, close)
+	end
+
+	return close
+end
+
 -- The textured panel header: a surfaced bar that bleeds out to the panel's own
--- edges, carrying an optional round badge, the title, and a surfaced close
--- button. This is the look the prototype theme gives the cash panel and the
--- four shop panels; `titleBar` above stays the flat, transparent header.
+-- edges, carrying the title and a surfaced close button. This is the look the
+-- prototype theme gives the four shop panels; `titleBar` above stays the flat,
+-- transparent header.
 --
--- `H` is a header config -- Theme.cashPackPanel itself for the cash panel, the
--- shared Theme.shopHeader for the shop-style ones. A panel whose theme has no
--- header config keeps the flat bar, which is what leaves the production theme,
--- and Settings and Pets in both themes, exactly as they were.
+-- `H` is a header config -- the shared Theme.shopHeader. A panel whose theme
+-- has no header config keeps the flat bar, which is what leaves the production
+-- theme, and Settings and Pets in both themes, exactly as they were.
 local function texturedTitleBar(parent, titleText, H)
 	-- titleBarBleed cancels the panel's UIPadding, letting the banner reach the
 	-- panel's own left, right and top edges instead of stopping at the padded
@@ -249,27 +298,6 @@ local function texturedTitleBar(parent, titleText, H)
 		BorderSizePixel = 0,
 	}, bar)
 
-	-- Only the cash panel carries a badge; the shop headers leave it out.
-	if H.badgeSize then
-		local badge = new("Frame", {
-			Name = "TitleBadge",
-			Size = H.badgeSize,
-			Position = H.badgePosition,
-			AnchorPoint = Vector2.new(0, 0.5),
-			BackgroundColor3 = H.badgeBackground,
-			BorderSizePixel = 0,
-		}, content)
-		new("UICorner", { CornerRadius = H.badgeCorner }, badge)
-		new("TextLabel", {
-			Size = UDim2.new(1, 0, 1, 0),
-			BackgroundTransparency = 1,
-			Text = H.badgeText or "$",
-			TextColor3 = H.badgeTextColor,
-			Font = H.badgeFont,
-			TextSize = H.badgeTextSize,
-		}, badge)
-	end
-
 	new("TextLabel", {
 		Name = "TitleLabel",
 		Size = H.titleSize,
@@ -283,40 +311,7 @@ local function texturedTitleBar(parent, titleText, H)
 		TextStrokeTransparency = H.titleStrokeTransparency,
 	}, content)
 
-	local close = new("TextButton", {
-		Name = "CloseButton",
-		Size = H.closeSize,
-		Position = H.closePosition,
-		AnchorPoint = Vector2.new(1, 0.5),
-		BackgroundColor3 = H.closeColor,
-		BorderSizePixel = 0,
-		Text = "X",
-		TextColor3 = H.closeTextColor,
-		Font = H.closeFont,
-		TextSize = H.closeTextSize,
-		TextStrokeTransparency = H.closeStrokeTransparency,
-	}, content)
-	corner(H.closeCorner, close)
-
-	-- The pattern is a child, and children always render above their parent, so
-	-- it would cover the button's own Text. The caption moves into a sibling
-	-- label with a higher ZIndex instead.
-	if H.closeSurface then
-		UISurface.applyTexturedSurface(close, H.closeSurface)
-		close.Text = ""
-		new("TextLabel", {
-			Name = "Caption",
-			-- Short by the lip, for the same reason TitleContent is.
-			Size = UDim2.new(1, 0, 1, -(H.closeSurface.depth or 0)),
-			BackgroundTransparency = 1,
-			Text = H.closeSurface.captionText,
-			TextColor3 = H.closeTextColor,
-			Font = H.closeFont,
-			TextSize = H.closeTextSize,
-			TextStrokeTransparency = H.closeStrokeTransparency,
-			ZIndex = 2,
-		}, close)
-	end
+	local close = closeButton(content, H)
 
 	return bar, close
 end
@@ -352,13 +347,101 @@ local function itemList(parent, topOffset, scrollBarColor)
 	return list
 end
 
+-- The extruded green plus button, used by both currency rows. Green means
+-- "buy / add" here, not cash, so the gem row's button is the same green.
+-- scale shrinks the size, depth, corner and tile proportionally for the
+-- smaller gem row; stroke and outline widths stay put. namePrefix keeps the
+-- two buttons' instance names apart ("" -> PlusButton, "Gem" -> GemPlusButton).
+-- Returns the face button and its depth, which the press animation needs.
+local function extrudedPlusButton(parent, position, scale, namePrefix)
+	local T = Theme.cashHud
+	local function scaled(px)
+		return math.round(px * scale)
+	end
+	local size = UDim2.fromOffset(scaled(T.plusSize.X.Offset), scaled(T.plusSize.Y.Offset))
+	local depth = scaled(T.plusDepth)
+	local cornerRadius = scaled(T.plusCorner)
+	local tileSize = UDim2.fromOffset(scaled(T.plusTileSize.X.Offset), scaled(T.plusTileSize.Y.Offset))
+
+	-- PlusBase and PlusButton are SIBLINGS inside the wrapper: a child always
+	-- draws above its parent, so a base parented to the face would cover it.
+	-- The wrapper is depth taller than the button and is what gets centred, so
+	-- face and base together sit in the middle of the row. ZIndex 2 keeps the
+	-- whole button above the panel's TileLayer.
+	local wrapper = new("Frame", {
+		Name = namePrefix .. "PlusWrapper",
+		Size = size + UDim2.fromOffset(0, depth),
+		Position = position,
+		AnchorPoint = Vector2.new(1, 0.5),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 2,
+	}, parent)
+
+	local base = new("Frame", {
+		Name = namePrefix .. "PlusBase",
+		Size = size,
+		Position = UDim2.fromOffset(0, depth),
+		BackgroundColor3 = Theme.color.white,
+		BorderSizePixel = 0,
+		ZIndex = 2,
+	}, wrapper)
+	corner(cornerRadius, base)
+	new("UIGradient", {
+		Rotation = T.plusGradientRotation,
+		Color = T.plusBaseGradient,
+	}, base)
+
+	-- Anchored at its top centre, so ButtonHoverEffect's grow spreads evenly
+	-- left and right over the base instead of only to the right. Text is
+	-- empty because the TileLayer child would cover the button's own text;
+	-- the "+" is the PlusLabel above the tiles instead.
+	local button = new("TextButton", {
+		Name = namePrefix .. "PlusButton",
+		Size = size,
+		Position = UDim2.fromScale(0.5, 0),
+		AnchorPoint = Vector2.new(0.5, 0),
+		BackgroundColor3 = Theme.color.white,
+		BorderSizePixel = 0,
+		ZIndex = 3,
+		Text = "",
+	}, wrapper)
+	corner(cornerRadius, button)
+	new("UIGradient", {
+		Rotation = T.plusGradientRotation,
+		Color = T.plusFaceGradient,
+	}, button)
+	-- Inner, so the rim stays within the face and the base below shows at the
+	-- same width; Outer would make the face wider than its base.
+	borderStroke(T.plusStrokeThickness, T.plusStrokeColor, Enum.BorderStrokePosition.Inner, button)
+	tileLayer(button, tileSize, T.plusTileTransparency, cornerRadius - T.plusStrokeThickness, T.plusStrokeThickness)
+
+	local label = new("TextLabel", {
+		Name = "PlusLabel",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		ZIndex = 2,
+		Text = "+",
+		Font = T.plusFont,
+		TextColor3 = T.plusTextColor,
+		TextScaled = true,
+	}, button)
+	-- Contextual, like the cash number's: outlines the glyph.
+	stroke(T.plusTextOutlineThickness, 0, T.plusTextOutlineColor, label)
+
+	return button, depth
+end
+
 local function buildCashHUDGroup(gui)
 	local T = Theme.cashHud
 
+	-- Anchored at the bottom so a taller currency bar grows the group upward,
+	-- leaving the button row where it is on screen.
 	local group = new("Frame", {
 		Name = "CashHUDGroup",
 		Size = T.groupSize,
 		Position = T.groupPosition,
+		AnchorPoint = Vector2.new(0, 1),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		ZIndex = 1,
@@ -377,89 +460,100 @@ local function buildCashHUDGroup(gui)
 	padding(T.cashPanelPadding, T.cashPanelPadding, T.cashPanelPadding, T.cashPanelPadding, cashPanel)
 	slateSurface(cashPanel, T.cashPanelCorner)
 
-	-- ZIndex 2 keeps the number above the TileLayer it shares the panel with.
+	-- The currency rows, stacked top to bottom by LayoutOrder. They get their
+	-- own holder because a UIListLayout in the panel itself would also stack
+	-- the panel's TileLayer. ZIndex 2 keeps everything in them above it. A
+	-- further row is one more currencyRow call plus its height in the theme.
+	local rows = new("Frame", {
+		Name = "CurrencyRows",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 2,
+	}, cashPanel)
+	listLayout(T.currencyRowGap, rows)
+
+	local function currencyRow(name, height, layoutOrder)
+		return new("Frame", {
+			Name = name,
+			Size = UDim2.new(1, 0, 0, height),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			LayoutOrder = layoutOrder,
+			ZIndex = 2,
+		}, rows)
+	end
+
+	-- The gem plus follows the gem number (see the theme's gemPlusGap), but
+	-- never goes past the cash plus. The label's box reaches that limit, so the
+	-- text only shrinks once the plus has nowhere further to go. Positions are in
+	-- row space, i.e. inside the panel's padding.
+	local rowWidth = T.cashPanelSize.X.Offset - 2 * T.cashPanelPadding
+	local gemLabelLeft = T.gemLabelPosition.X.Offset
+	local gemPlusWidth = math.round(T.plusSize.X.Offset * T.gemRowScale)
+	local gemPlusMaxRight = rowWidth + T.plusPosition.X.Offset
+
+	-- Gems first: the smaller, secondary row sits above cash.
+	local gemRow = currencyRow("GemRow", T.gemRowHeight, 1)
+
+	new("ImageLabel", {
+		Name = "GemIcon",
+		Size = T.gemIconSize,
+		Position = T.gemIconPosition,
+		AnchorPoint = Vector2.new(0, 0.5),
+		BackgroundTransparency = 1,
+		Image = Theme.asset.gemIcon,
+		ScaleType = Enum.ScaleType.Fit,
+		ZIndex = 2,
+	}, gemRow)
+
+	local gemLabel = new("TextLabel", {
+		Name = "GemLabel",
+		Size = UDim2.new(0, gemPlusMaxRight - gemPlusWidth - T.gemPlusGap - gemLabelLeft, 1, 0),
+		Position = T.gemLabelPosition,
+		AnchorPoint = Vector2.new(0, 0.5),
+		BackgroundTransparency = 1,
+		ZIndex = 2,
+		Text = "0",
+		TextColor3 = T.gemLabelColor,
+		Font = T.gemLabelFont,
+		TextSize = T.gemLabelTextSize,
+		TextXAlignment = Enum.TextXAlignment.Left,
+	}, gemRow)
+	outlineText(gemLabel)
+	capTextSize(gemLabel, T.gemLabelTextSize)
+
+	local gemPlusButton, gemPlusDepth = extrudedPlusButton(gemRow, UDim2.fromScale(0, 0.5), T.gemRowScale, "Gem")
+	local gemPlusWrapper = gemPlusButton.Parent
+
+	-- extrudedPlusButton anchors the wrapper at its right edge, so place that.
+	-- Instant, not tweened: the button just sits after whatever the number is.
+	local function placeGemPlus()
+		local right = gemLabelLeft + gemLabel.TextBounds.X + T.gemPlusGap + gemPlusWidth
+		gemPlusWrapper.Position = UDim2.new(0, math.min(math.round(right), gemPlusMaxRight), 0.5, 0)
+	end
+	gemLabel:GetPropertyChangedSignal("TextBounds"):Connect(placeGemPlus)
+	placeGemPlus()
+
+	local cashRow = currencyRow("CashRow", T.cashRowHeight, 2)
+
 	local cashLabel = new("TextLabel", {
 		Name = "CashLabel",
 		Size = T.cashLabelSize,
 		Position = T.cashLabelPosition,
 		AnchorPoint = Vector2.new(0, 0.5),
 		BackgroundTransparency = 1,
-		LayoutOrder = 2,
 		ZIndex = 2,
 		Text = "$0",
 		TextColor3 = T.cashLabelColor,
 		Font = T.cashLabelFont,
 		TextSize = T.cashLabelTextSize,
 		TextXAlignment = Enum.TextXAlignment.Left,
-	}, cashPanel)
+	}, cashRow)
 	outlineText(cashLabel)
+	capTextSize(cashLabel, T.cashLabelTextSize)
 
-	-- The extruded plus button. PlusBase and PlusButton are SIBLINGS inside
-	-- the wrapper: a child always draws above its parent, so a base parented
-	-- to the face would cover it. The wrapper is plusDepth taller than the
-	-- button and is what gets centred, so face and base together sit in the
-	-- middle of the panel. ZIndex 2 keeps the whole button above the TileLayer.
-	local plusWrapper = new("Frame", {
-		Name = "PlusWrapper",
-		Size = T.plusSize + UDim2.fromOffset(0, T.plusDepth),
-		Position = T.plusPosition,
-		AnchorPoint = Vector2.new(1, 0.5),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		LayoutOrder = 3,
-		ZIndex = 2,
-	}, cashPanel)
-
-	local plusBase = new("Frame", {
-		Name = "PlusBase",
-		Size = T.plusSize,
-		Position = UDim2.fromOffset(0, T.plusDepth),
-		BackgroundColor3 = Theme.color.white,
-		BorderSizePixel = 0,
-		ZIndex = 2,
-	}, plusWrapper)
-	corner(T.plusCorner, plusBase)
-	new("UIGradient", {
-		Rotation = T.plusGradientRotation,
-		Color = T.plusBaseGradient,
-	}, plusBase)
-
-	-- Anchored at its top centre, so ButtonHoverEffect's grow spreads evenly
-	-- left and right over the base instead of only to the right. Text is
-	-- empty because the TileLayer child would cover the button's own text;
-	-- the "+" is the PlusLabel above the tiles instead.
-	local plusButton = new("TextButton", {
-		Name = "PlusButton",
-		Size = T.plusSize,
-		Position = UDim2.fromScale(0.5, 0),
-		AnchorPoint = Vector2.new(0.5, 0),
-		BackgroundColor3 = Theme.color.white,
-		BorderSizePixel = 0,
-		ZIndex = 3,
-		Text = "",
-	}, plusWrapper)
-	corner(T.plusCorner, plusButton)
-	new("UIGradient", {
-		Rotation = T.plusGradientRotation,
-		Color = T.plusFaceGradient,
-	}, plusButton)
-	-- Inner, so the rim stays within the face's 32px and the base below shows
-	-- at the same width; Outer would make the face 6px wider than its base.
-	borderStroke(T.plusStrokeThickness, T.plusStrokeColor, Enum.BorderStrokePosition.Inner, plusButton)
-	tileLayer(plusButton, T.plusTileSize, T.plusTileTransparency, T.plusCorner - T.plusStrokeThickness, T.plusStrokeThickness)
-
-	local plusLabel = new("TextLabel", {
-		Name = "PlusLabel",
-		Size = UDim2.fromScale(1, 1),
-		BackgroundTransparency = 1,
-		ZIndex = 2,
-		Text = "+",
-		Font = T.plusFont,
-		TextColor3 = T.plusTextColor,
-		TextScaled = true,
-	}, plusButton)
-	-- Contextual, like the cash number's: outlines the glyph.
-	stroke(T.plusTextOutlineThickness, 0, T.plusTextOutlineColor, plusLabel)
+	local plusButton, plusDepth = extrudedPlusButton(cashRow, T.plusPosition, 1, "")
 
 	local outline = T.rowButtonOutline
 	local depth = T.rowButtonDepth
@@ -611,6 +705,10 @@ local function buildCashHUDGroup(gui)
 		cashPanel = cashPanel,
 		cashLabel = cashLabel,
 		plusButton = plusButton,
+		plusDepth = plusDepth,
+		gemLabel = gemLabel,
+		gemPlusButton = gemPlusButton,
+		gemPlusDepth = gemPlusDepth,
 		teleportButton = teleportButton,
 		buttonRow = row,
 		inventoryButton = inventoryButton,
@@ -944,6 +1042,18 @@ local function buildInventoryPanel(gui)
 	return { panel = panel, closeButton = closeButton, content = content }
 end
 
+-- The tabbed purchase panel (Cash / Gems). The panel Frame is a transparent
+-- container: it keeps the size and position, and is what PanelManager shows
+-- and hides. Inside it, the slate Body holds one item list per tab, and the
+-- tabs and the X sit in the strip above the body. selectTab only restyles the
+-- tabs and swaps which list is visible; the frame, the X and the body never
+-- move. Sibling ZIndex order: inactive tab 1 (behind the body), body 2, active
+-- tab and X 3 (in front).
+local CASH_PACK_TABS = {
+	{ name = "cash", label = "Cash", surfaceKey = "cashTabSurface", scrollBarKey = "scrollBarColor" },
+	{ name = "gems", label = "Gems", surfaceKey = "gemTabSurface", scrollBarKey = "gemScrollBarColor" },
+}
+
 local function buildCashPackPanel(gui)
 	local T = Theme.cashPackPanel
 
@@ -952,22 +1062,113 @@ local function buildCashPackPanel(gui)
 		Size = T.size,
 		Position = T.position,
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		BackgroundColor3 = T.background,
+		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		ZIndex = 10,
 		Visible = false,
 	}, gui)
-	corner(T.cornerRadius, panel)
-	stroke(T.strokeThickness, T.strokeTransparency, T.strokeColor, panel)
-	padding(T.padding, T.padding, T.padding, T.padding, panel)
 
-	-- The whole header -- bleeding bar, "$" badge, title and X -- comes from
-	-- the shared helper, which reads these keys straight off this theme table.
-	local _, close = texturedTitleBar(panel, "Cash", T)
+	-- Active so it swallows clicks: the inactive tab extends down behind it and
+	-- must not be clickable through the body.
+	local body = new("Frame", {
+		Name = "Body",
+		Size = UDim2.new(1, 0, 1, -T.tabStripHeight),
+		Position = UDim2.fromOffset(0, T.tabStripHeight),
+		BackgroundColor3 = T.background,
+		BorderSizePixel = 0,
+		Active = true,
+		ZIndex = 2,
+	}, panel)
+	corner(T.cornerRadius, body)
+	stroke(T.strokeThickness, T.strokeTransparency, T.strokeColor, body)
+	padding(T.padding, T.padding, T.padding, T.padding, body)
 
-	local list = itemList(panel, T.listTopOffset, T.scrollBarColor)
+	local close = closeButton(panel, T)
+	close.ZIndex = 3
 
-	return { panel = panel, closeButton = close, itemList = list }
+	local tabs = {}
+	local lists = {}
+	local tabButtons = {}
+	for index, definition in ipairs(CASH_PACK_TABS) do
+		local activeSurface = T[definition.surfaceKey]
+		local strokeWidth = activeSurface.strokeThickness
+
+		-- Wide enough for the face's outer side outlines, and exactly as tall as
+		-- the strip, so its bottom edge is the body's top edge. While the tab is
+		-- active this clips the face there: square bottom corners, no outline
+		-- along the shared edge, and the face covers the body's own top outline.
+		local holder = new("Frame", {
+			Name = definition.label .. "Tab",
+			Size = UDim2.fromOffset(T.tabWidth + 2 * strokeWidth, T.tabStripHeight),
+			Position = UDim2.fromOffset(T.tabStartX + (index - 1) * (T.tabWidth + T.tabGap) - strokeWidth, 0),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+		}, panel)
+
+		-- No hover or press effect on tabs, so no AutoButtonColor either.
+		local face = new("TextButton", {
+			Name = "Face",
+			BorderSizePixel = 0,
+			AutoButtonColor = false,
+			Text = "",
+		}, holder)
+
+		-- ZIndex 2 keeps the text above the surface's PatternLayer.
+		local label = new("TextLabel", {
+			Name = "Label",
+			BackgroundTransparency = 1,
+			ZIndex = 2,
+			Text = definition.label,
+			Font = T.tabFont,
+			TextSize = T.tabTextSize,
+			TextStrokeTransparency = T.tabTextStrokeTransparency,
+		}, face)
+
+		local list = itemList(body, 0, T[definition.scrollBarKey])
+		list.Name = definition.label .. "List"
+
+		tabs[definition.name] = {
+			holder = holder,
+			face = face,
+			label = label,
+			list = list,
+			activeSurface = activeSurface,
+			strokeWidth = strokeWidth,
+		}
+		lists[definition.name] = list
+		tabButtons[definition.name] = face
+	end
+
+	local function selectTab(tabName)
+		if not tabs[tabName] then
+			warn("[CashPackPanel] Unknown tab '" .. tostring(tabName) .. "'.")
+			return
+		end
+		for name, tab in pairs(tabs) do
+			local active = name == tabName
+			local visibleHeight = if active then T.tabActiveHeight else T.tabInactiveHeight
+			tab.holder.ZIndex = if active then 3 else 1
+			tab.holder.ClipsDescendants = active
+			-- Taller than its visible part by the corner radius, so the rounded
+			-- bottom corners never show: clipped off while active, hidden behind
+			-- the body while inactive.
+			tab.face.Size = UDim2.fromOffset(T.tabWidth, visibleHeight + T.tabCornerRadius)
+			tab.face.Position = UDim2.fromOffset(tab.strokeWidth, T.tabStripHeight - visibleHeight)
+			tab.label.Size = UDim2.new(1, 0, 0, visibleHeight)
+			tab.label.TextColor3 = if active then T.tabTextColor else T.tabInactiveTextColor
+			UISurface.applyTexturedSurface(tab.face, if active then tab.activeSurface else T.inactiveTabSurface)
+			tab.list.Visible = active
+		end
+	end
+	selectTab("cash")
+
+	return {
+		panel = panel,
+		closeButton = close,
+		lists = lists,
+		tabButtons = tabButtons,
+		selectTab = selectTab,
+	}
 end
 
 -- Shared chrome for the NPC shop panels. Despite the spec describing these as
@@ -1082,6 +1283,10 @@ function MainHUDBuilder.build(gui)
 	builtRefs = {
 		cashLabel = cashHud.cashLabel,
 		plusButton = cashHud.plusButton,
+		plusDepth = cashHud.plusDepth,
+		gemLabel = cashHud.gemLabel,
+		gemPlusButton = cashHud.gemPlusButton,
+		gemPlusDepth = cashHud.gemPlusDepth,
 		teleportButton = cashHud.teleportButton,
 		inventoryButton = cashHud.inventoryButton,
 		settingsButton = cashHud.settingsButton,

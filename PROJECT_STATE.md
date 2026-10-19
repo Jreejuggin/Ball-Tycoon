@@ -67,7 +67,7 @@ game/
 │   │            ShopRowBuilder, CashFormat, Tooltip, SFXSettings
 │   ├── HUD theme (see section 2.8): UITheme (selector), UITheme_Production,
 │   │            UITheme_Prototype, UISurface (textured-surface helper)
-│   ├── Shop item configs (Robux): ShopConfig, CashPackConfig
+│   ├── Shop item configs (Robux): ShopConfig, CashPackConfig, GemConfig
 │   ├── Shop item configs (in-game Cash, MiddleShops): CreatureShopConfig,
 │   │            BallShopConfig, GearShopConfig; plus dormant TradingPostConfig,
 │   │            VaultConfig, UpgradeShopConfig (see section 2.4b)
@@ -145,6 +145,8 @@ game/
 │       │   cooldown (see section 2.13)
 │       ├── CombatDamageService — shared PvP damage, knockback and ragdoll
 │       ├── ThrowableBallCombatService — server-side projectile simulation
+│       ├── PurchaseReceiptService — the single ProcessReceipt handler for
+│       │   all Developer Products (section 2.11)
 │       └── StructurePurchaseService — only required by the per-slot
 │           StructureBuyPadScripts, which are saved Disabled (section 2.15)
 │
@@ -156,14 +158,16 @@ game/
 │   │   ├── MiddleShopsController (LocalScript) — wires the MiddleShops panels
 │   │   ├── ShopPanelController, CashPackPanelController (ModuleScripts)
 │   │   ├── Tooltip (TextLabel) — single shared hover-tooltip element
-│   │   ├── CashHUDGroup — CashPanel (+ PlusButton), the house-icon
-│   │   │   TeleportToTycoonButton, and a ButtonRow of four icon buttons:
-│   │   │   Shop, Pets, Inventory, Settings. All six buttons have tooltips.
+│   │   ├── CashHUDGroup — CashPanel (a GemRow above a CashRow, each with
+│   │   │   its own green plus), the house-icon TeleportToTycoonButton, and a
+│   │   │   ButtonRow of four icon buttons: Shop, Pets, Inventory, Settings.
+│   │   │   All seven buttons have tooltips.
 │   │   ├── SettingsPanel — Music toggle (real, wired to MusicGUI's
 │   │   │   LocalMusicHandler), SFX toggle (real, wired to SFXSettings)
 │   │   ├── ShopPanel — Robux shop (ShopConfig items), rows via ShopRowBuilder
-│   │   ├── CashPackPanel — Cash purchase packs (CashPackConfig, Robux),
-│   │   │   custom row styling (not ShopRowBuilder)
+│   │   ├── CashPackPanel — tabbed purchase panel: Cash tab (CashPackConfig)
+│   │   │   and Gems tab (GemConfig), both Robux; cards from createPackRow
+│   │   │   (not ShopRowBuilder)
 │   │   ├── PetsPanel — placeholder (still "Soon" pills, not functional)
 │   │   ├── InventoryPanel — placeholder (empty content area)
 │   │   ├── CreatureShopPanel, BallShopPanel, GearShopPanel — the MiddleShops
@@ -238,6 +242,21 @@ game/
   and the Daily Worker Gifts cooldown timestamp (see section 2.13)
 - Loads on join; saves on leave, on server close (BindToClose), and on a 60s
   autosave loop. Each save retries up to 3 times with exponential backoff.
+  Saves for one player run one at a time, and nothing is saved until loading
+  has finished (so a player who leaves mid-load can't overwrite their save
+  with defaults). BindToClose saves everyone in parallel and waits up to 25s
+  for those and any in-flight leave-saves.
+- **Session locking:** the load is an `UpdateAsync` that also writes a
+  `SessionLock` (`SessionId` per player-session, `JobId`, `Time`) into the
+  record. Every save only writes if the record still holds this session's
+  lock; the leave-save releases it. If another session holds a fresh lock, the
+  load retries every 5s for 30s (normally the old server releases it within
+  seconds), then takes it over. A lock not refreshed for 5 minutes is treated
+  as abandoned and taken at once. A session that finds its lock taken stops
+  saving (`DataSessionLost` attribute) and kicks the player. A record holding
+  only a lock (no `Cash`) still loads as a brand-new player. This prevents a
+  stale server's save from overwriting a newer one, which matters most for
+  Robux purchases.
 - If the load fails, sets `DataLoadFailed` and refuses to save for that session,
   so a failed load can never overwrite real data
 - Sets player:SetAttribute("DataLoaded", true) to signal completion
@@ -395,7 +414,13 @@ configs' shape, not designed. Swap in real gear before shipping.
 - **PanelManager** (ReplicatedStorage) — single-panel-exclusive open/close.
   Any panel can call PanelManager.registerPanel(panel); opening one closes
   all others. MainHUDController and MiddleShopsController both register
-  their panels into the same manager.
+  their panels into the same manager. A tabbed panel also registers a
+  `selectTab(tabName)` function (`registerPanel(panel, selectTab)`) and can
+  then be opened straight to a tab: `open(panel, "gems")`. Opening a tab on
+  an already-open panel only switches tabs (no close/reopen);
+  `toggle(panel, tabName)` closes only if the panel is open on that same tab.
+  Calls without a tab behave exactly as before, and `closeAll()` is
+  unchanged.
 - **ShopRowBuilder** (ReplicatedStorage) — builds one row (icon/name/price/Buy
   button + hover animation) per config entry. Purchase flow is pluggable via
   an optional 4th `onBuy(item)` argument to buildRows -- omit it for the
@@ -405,6 +430,9 @@ configs' shape, not designed. Swap in real gear before shipping.
   sharing the same UI code without duplicating it.
 - **CashFormat** (ReplicatedStorage) — comma-formats Cash amounts for display,
   e.g. 50000 -> "$50,000". Used by every MiddleShops config module.
+  `CashFormat.abbreviate` is the HUD's one K/M/B formatter ("1.23M", two
+  decimals, no currency symbol), shared by the cash and gem amounts and the
+  richest banner.
 
 **Item prices are all placeholders and will change once the economy is
 tuned** -- CreatureShopConfig/BallShopConfig/GearShopConfig (and the dormant
@@ -443,18 +471,50 @@ in each config, no other code changes needed.
   open/close (via PanelManager), Settings toggles, Richest Player Banner,
   Health Bar, hover animations + tooltips for every CashHUDGroup button
 - MiddleShopsController (LocalScript) — see section 2.4b
-- CashHUDGroup (Frame): groups CashPanel (with "+" button opening
-  CashPackPanel), TeleportToTycoonButton (fires TeleportToTycoonEvent),
-  and a ButtonRow of Shop/Pets/Inventory/Settings icon buttons, so their
-  spacing stays fixed together
+- CashHUDGroup (Frame): groups CashPanel, TeleportToTycoonButton (fires
+  TeleportToTycoonEvent), and a ButtonRow of Shop/Pets/Inventory/Settings
+  icon buttons, so their spacing stays fixed together. The group is anchored
+  at its bottom-left corner, so a taller CashPanel grows it upward and the
+  ButtonRow keeps its place on screen.
+- CashPanel (the slate currency bar) stacks two rows in a `CurrencyRows`
+  holder with a UIListLayout (a layout directly in the panel would also stack
+  its TileLayer): `GemRow` on top (gem icon, `BankedGems` amount in gem
+  violet, green plus) and `CashRow` below (cash amount, green plus). The gem
+  row and its plus are `gemRowScale` (0.78) of the cash row's size. Both plus
+  buttons come from one builder, `extrudedPlusButton`, and share one press
+  animation. The two plus buttons are deliberately **staggered**, not
+  aligned: the cash plus is fixed at the bar's right edge, while the gem plus
+  follows the gem number, `gemPlusGap` px after its `TextBounds`, repositioned
+  instantly whenever the text changes, and never past the cash plus. Both
+  amounts cap their text size and shrink only if a value would reach the
+  plus button.
 - SettingsPanel: Music toggle -- REAL, wired to MusicGUI's LocalMusicHandler
   (shared mute state with MusicPlaylistGUI via the OnMusicMuteChanged
   BindableEvent). SFX toggle -- REAL, wired to SFXSettings.
 - ShopPanel + ShopPanelController: Robux shop (ShopConfig items), rows via
   shared ShopRowBuilder
-- CashPackPanel + CashPackPanelController: Cash purchase packs
-  (CashPackConfig, Robux), custom row styling with a "50% OFF!" badge
-- PetsPanel: placeholder with "Soon" pills — still not functional
+- CashPackPanel + CashPackPanelController: the tabbed purchase panel.
+  - The panel Frame is a transparent container (same size/position; what
+    PanelManager toggles) holding a neutral slate `Body`, two tabs ("Cash",
+    "Gems") in the strip above it, and the X (shared `closeButton` builder).
+  - Windows-style tabs: the active tab (ZIndex above the body, clipped at the
+    body's top edge) joins the body with square bottom corners and no
+    outline along the shared edge; the inactive tab is shorter, darker and
+    sits behind the body. Only the active tab (green stripes for Cash,
+    gemLight -> gemDeep for Gems) and the cards carry currency colour.
+  - `selectTab` (from MainHUDBuilder, registered with PanelManager) restyles
+    the tabs and swaps which item list is visible. Nothing else moves, and
+    no animation is involved.
+  - The cash "+" opens the Cash tab, the gem "+" the Gems tab; pressing one
+    while the panel is open on the other tab switches tabs, and on its own
+    tab closes the panel. Clicking a tab switches to it.
+  - Cards: one `createPackRow` builds both kinds from a style table,
+    `Theme.cashPackRow` (with the "50% OFF!" promo line, now
+    `discountText`) or `Theme.gemPackRow` (the cash card's layout with
+    violet accents, no promo line, same green Buy button).
+- PetsPanel: placeholder with "Soon" pills — still not functional, and no
+  longer reachable: the pets button now opens the Creature Shop panel (the
+  same one the NPC's prompt opens), so creatures can be bought from anywhere.
 - InventoryPanel: placeholder with an empty content area (added in PR #18)
 - CreatureShopPanel / BallShopPanel / GearShopPanel: the MiddleShops panels
   — see section 2.4b
@@ -469,7 +529,10 @@ text content) deliberately stays out of the theme.
   string names which module to return. It currently names
   `UITheme_Prototype`.
 - `UITheme_Production` and `UITheme_Prototype` are full copies, not an
-  override layer. As of PR #18 they are **byte-identical**.
+  override layer. They were byte-identical at PR #18, and again once the
+  approved gem HUD blocks (gem row, gem colours and icon, tabbed purchase
+  panel, gem cards, the cash card's promo text, and the richest banner's
+  corner formula) were copied into Production on `feature/gem-currency-hud`.
 - **Workflow (decided 2026-10-08):** try new looks in
   `UITheme_Prototype`; once approved, copy the changed blocks into
   `UITheme_Production`. Keep both files; don't collapse them into one.
@@ -662,8 +725,21 @@ Two things to keep in mind when editing this UI:
 **Robux (placeholder, not configured):**
 - ShopConfig (ReplicatedStorage): 5 Robux items — AutoCollect (R$149), 2X Cash (R$349), Infinite Cash (R$1499), Mega Dropper (R$249), Golden Dropper (R$599). All productIds = 0.
 - CashPackConfig (ReplicatedStorage): 8 cash packs from 5K (R$15) to 5M (R$1999). All productIds = 0.
-- Both need real Developer Product IDs from Creator Dashboard before they can sell anything -- Buy currently warns instead of prompting.
-- There is no `MarketplaceService.ProcessReceipt` handler anywhere in `src/` yet, so even with real IDs, purchases would not grant anything until one is written.
+- GemConfig (ReplicatedStorage): 5 gem bundles, 100 to 6,500 gems. Amounts, Robux prices and productIds are placeholders; the ids are named constants at the top of the file.
+- All need real Developer Product IDs from Creator Dashboard before they can sell anything -- Buy currently warns instead of prompting.
+
+**PurchaseReceiptService** (ServerScriptService, ModuleScript) is the game's
+single `MarketplaceService.ProcessReceipt` handler, started by DataSaveScript.
+Roblox honours only one, so **never assign ProcessReceipt anywhere else** --
+add new products here. It maps each non-zero productId in CashPackConfig and
+GemConfig to a grant (`amount` added to `leaderstats.Cash`, or to
+`GemData.BankedGems` for gems). It waits up to 60s for the buyer's data to
+load, and grants each `PurchaseId` once. Granted ids are kept in the save as
+`ProcessedReceipts` (newest 100). `PurchaseGranted` is returned only after a
+save containing the grant succeeds; otherwise `NotProcessedYet`, and Roblox
+re-sends the receipt later. **ShopConfig products have no grant logic yet**:
+if their ids are filled in, purchases are left unprocessed (with a warning)
+until a grant is added.
 
 **In-game Cash (functional, MiddleShops):**
 - CreatureShopConfig, BallShopConfig, GearShopConfig, and the dormant
@@ -912,7 +988,9 @@ unowned, and pre-purchase plots stay walkable.
 
 A second currency, **Gems**, was added in PR #15. DataSaveScript creates a
 `GemData` folder on each player with two IntValues, `Gems` (carried) and
-`BankedGems` (safe), and saves both.
+`BankedGems` (safe), and saves both. **Gems bought with Robux are granted to
+`BankedGems`** (decided 2026-10-09, so paid currency is never at risk), and
+`BankedGems` is the gem balance the HUD shows.
 
 **BankZoneHandler** (server) polls every 0.25s for living players standing
 inside `Workspace.MiddleShops.BankStructure.BankZone`. A player carrying at
@@ -924,8 +1002,9 @@ requests a deposit. **BankFeedbackClient** shows the countdown and a toast,
 in its own code-built ScreenGui.
 
 Known gaps:
-- **Nothing awards Gems yet.** `Gems` is only ever written by DataSaveScript
-  (load) and BankZoneHandler (deposit). The comment beside it says "Earned
+- **Nothing awards carried Gems yet.** `Gems` is only ever written by
+  DataSaveScript (load) and BankZoneHandler (deposit); Robux purchases go to
+  `BankedGems`. The comment beside it says "Earned
   through gameplay, not yet safe", but no earning mechanic exists. It is also
   not documented what "not yet safe" protects against (e.g. losing carried
   Gems on death), and nothing implements such a loss.
@@ -1012,6 +1091,7 @@ restores the default UI if the script is destroyed. It is presentation only.
 18. **Swappable HUD theme with a sandbox copy:** every MainHUD visual value lives in a theme table, and `UITheme` selects which table is active. `UITheme_Prototype` is where new looks are tried; approved changes are copied into `UITheme_Production`. Both files are kept, with matching key sets. See section 2.8.
 19. **Plots are reset to blank when their owner leaves:** PlotAssignmentScript snapshots the departing player's progress first, then resets every purchase, restores each plot script's original enabled state, and destroys that plot's loose balls/crates before releasing ownership. The next player always gets a clean plot. See section 2.1.
 20. **Avatar weapons are server-authoritative PvP:** the client only requests a swing or throw. The server chooses and validates targets through CombatDamageService, and only other players' unshielded characters can be hit. See section 2.18.
+21. **One receipt handler, session-locked saves:** every Developer Product is granted by PurchaseReceiptService's single ProcessReceipt, which records each PurchaseId in the save and only acknowledges a purchase after that save succeeds. DataSaveScript's session lock stops a stale server from overwriting a newer save, so an acknowledged purchase can't be lost by a quick server switch. See sections 2.1 and 2.11.
 
 ---
 
@@ -1023,14 +1103,14 @@ are about them.
 
 ### 4.1 Confirmed gaps (verified in code)
 
-- **ShopConfig & CashPackConfig productIds:** all set to 0, and there is no `ProcessReceipt` handler anywhere in `src/`. Nothing can be bought with Robux yet; Buy warns instead of prompting.
+- **ShopConfig, CashPackConfig & GemConfig productIds:** all set to 0, so nothing can be bought with Robux yet; Buy warns instead of prompting. PurchaseReceiptService grants cash packs and gem bundles once ids are filled in; ShopConfig items still have no grant logic (section 2.11).
 - **Nothing awards Gems:** the Bank works, but `Gems` is never incremented by any gameplay script (section 2.16).
 - **Creature Shop Backpack item is not persisted:** it is cloned into the Backpack only, so it is lost on respawn and on rejoin. The PurchasedItems counters *are* saved.
 - **Creature Shop items:** all 4 tiers grant the same placeholder visual (CreatureBall_Slimey mesh) and need real per-tier models.
 - **Ball and Gear Shop items:** only increment the PurchasedItems counter; no physical item is granted. GearShopConfig's items themselves are placeholder content, not just their prices.
 - **MiddleShops item prices:** placeholder Cash costs in CreatureShopConfig/BallShopConfig/GearShopConfig (and the dormant TradingPost/Vault/UpgradeShop configs).
 - **Very low in-plot prices:** centres cost 5, Home structures 1, the Coil 1, and the Knockback Plank and Throwable Ball 10 (identical on all ten plots). They look like test values (section 2.14).
-- **PetsPanel and InventoryPanel:** placeholders. The Pets panel shows "Soon" pills; the Inventory panel is empty.
+- **PetsPanel and InventoryPanel:** placeholders. The Pets panel shows "Soon" pills and nothing opens it any more (the pets button opens the Creature Shop); the Inventory panel is empty.
 - **Orb and Pet centres:** unlockable but empty (section 2.14).
 - **Daily Worker Gifts reward is a placeholder:** `PLACEHOLDER_GIFT_REWARD_CASH = 150` in WorkerNotesGiftsStationService. Swapping in the real reward is a one-line change.
 - **Daily Worker Gifts opening animation:** not built, and it's still undecided whether to build it. The claim flow is complete and functional without it (section 2.13).
@@ -1078,7 +1158,7 @@ here because doc passes must not edit code:
 
 Working today:
 - Players join → assigned a plot → buy droppers → buy conveyors → unlock centres → hire workers → buy structures and Avatar upgrades → upgrade machines → collect cash. Plots are reset to blank when their owner leaves.
-- Data persists across sessions under `PlayerCashData_v3`: Cash, Gems, plot progression (centres, structures, stations, workers), upgrade level, PurchasedItems counters, plot color, tutorial progress, and the Daily Worker Gifts cooldown. Saving uses a 60s autosave with retries and is disabled for a session whose load failed.
+- Data persists across sessions under `PlayerCashData_v3`: Cash, Gems and BankedGems, plot progression (centres, structures, stations, workers), upgrade level, PurchasedItems counters, plot color, tutorial progress, the Daily Worker Gifts cooldown, and processed Robux receipts. Saving uses a 60s autosave with retries, session locking against cross-server overwrites, and is disabled for a session whose load failed.
 - All plot machine/structure/wall/glass accents and HiringKiosks respond to server-authoritative player color choices.
 - Workers auto-collect cash balls; a kiosk billboard shows worker progress.
 - Visual/audio feedback for purchases, upgrades, and section completions, including working UI hover/click sounds.
@@ -1096,7 +1176,7 @@ Not yet built:
 - Orb centre, Pet centre, and the pets system (Pets panel is a placeholder)
 - Inventory panel content
 - A way to earn Gems
-- Real Robux monetization (product IDs and receipt processing)
+- Real Robux monetization (product IDs; grant logic for ShopConfig items)
 - Real per-item assets for the MiddleShops, and persistence of granted shop items
 - A game loop or win condition beyond tycoon progression
 - A mid-tutorial skip control

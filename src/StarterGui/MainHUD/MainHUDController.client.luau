@@ -9,6 +9,7 @@ local ButtonHoverEffect = require(ReplicatedStorage:WaitForChild("ButtonHoverEff
 local Tooltip = require(ReplicatedStorage:WaitForChild("Tooltip"))
 local SFXSettings = require(ReplicatedStorage:WaitForChild("SFXSettings"))
 local Theme = require(ReplicatedStorage:WaitForChild("UITheme"))
+local CashFormat = require(ReplicatedStorage:WaitForChild("CashFormat"))
 
 -- The MusicGUI loader supplies these client-side modules at runtime. Using its
 -- shared handler ensures the MainHUD and MusicPlaylistGUI control the same song.
@@ -30,6 +31,8 @@ local refs = MainHUDBuilder.build(gui)
 
 local cashLabel = refs.cashLabel
 local plusButton = refs.plusButton
+local gemLabel = refs.gemLabel
+local gemPlusButton = refs.gemPlusButton
 local teleportToTycoonButton = refs.teleportButton
 local teleportToTycoonEvent = ReplicatedStorage:WaitForChild("TeleportToTycoonEvent")
 
@@ -48,6 +51,10 @@ local shopCloseButton = refs.shop.closeButton
 local petsButton = refs.petsButton
 local petsPanel = refs.pets.panel
 local petsCloseButton = refs.pets.closeButton
+-- The pets button opens the Creature Shop, the same panel as the NPC's prompt.
+-- MiddleShopsController fills and registers it; PanelManager is shared, so
+-- toggling it from here needs nothing more.
+local creatureShopPanel = refs.middleShops.creature.panel
 
 local inventoryButton = refs.inventoryButton
 local inventoryPanel = refs.inventory.panel
@@ -61,24 +68,11 @@ local richestLabel = refs.richestLabel
 local healthFillBar = refs.healthBar.fill
 local healthLabel = refs.healthBar.label
 
--- ===== Cash formatting =====
--- Abbreviates large numbers (1,234,567 -> "1.23M") so the panel stays a
--- fixed width even as Cash grows. Falls back to plain commas under 1,000.
-local SUFFIXES = { "K", "M", "B" }
-
+-- ===== Currency displays =====
+-- Both amounts use the shared abbreviation (1,234,567 -> "1.23M"), so the bar
+-- stays a fixed width as they grow.
 local function formatCash(amount)
-	if amount < 1000 then
-		return "$" .. amount
-	end
-
-	local value = amount
-	local suffixIndex = 0
-	while value >= 1000 and suffixIndex < #SUFFIXES do
-		value = value / 1000
-		suffixIndex += 1
-	end
-
-	return string.format("$%.2f%s", value, SUFFIXES[suffixIndex])
+	return "$" .. CashFormat.abbreviate(amount)
 end
 
 local function updateCashLabel(cashValue)
@@ -93,6 +87,16 @@ cash:GetPropertyChangedSignal("Value"):Connect(function()
 end)
 updateCashLabel(cash.Value)
 
+-- The HUD shows banked gems: the safe balance, and where bought gems land.
+local bankedGems = player:WaitForChild("GemData"):WaitForChild("BankedGems")
+
+local function updateGemLabel()
+	gemLabel.Text = CashFormat.abbreviate(bankedGems.Value)
+end
+
+bankedGems:GetPropertyChangedSignal("Value"):Connect(updateGemLabel)
+updateGemLabel()
+
 -- ===== Panel open/close system =====
 -- Uses the shared PanelManager so newly added panels (e.g. the MiddleShops
 -- shop panels) can register themselves from other scripts and participate
@@ -103,7 +107,8 @@ PanelManager.registerPanel(settingsPanel)
 PanelManager.registerPanel(shopPanel)
 PanelManager.registerPanel(petsPanel)
 PanelManager.registerPanel(inventoryPanel)
-PanelManager.registerPanel(cashPackPanel)
+-- Registered with its tab switcher, so it can be opened straight to a tab.
+PanelManager.registerPanel(cashPackPanel, refs.cashPack.selectTab)
 
 local function closeAllPanels()
 	PanelManager.closeAll()
@@ -114,9 +119,19 @@ local function togglePanel(panel)
 end
 
 -- ===== Cash and tycoon travel buttons =====
+-- Each plus opens the purchase panel on its own tab. Pressed while the panel
+-- is open on the other tab it switches tabs; on its own tab it closes it.
 plusButton.MouseButton1Click:Connect(function()
-	togglePanel(cashPackPanel)
+	PanelManager.toggle(cashPackPanel, "cash")
 end)
+gemPlusButton.MouseButton1Click:Connect(function()
+	PanelManager.toggle(cashPackPanel, "gems")
+end)
+for tabName, tabButton in pairs(refs.cashPack.tabButtons) do
+	tabButton.MouseButton1Click:Connect(function()
+		PanelManager.open(cashPackPanel, tabName)
+	end)
+end
 
 teleportToTycoonButton.Activated:Connect(function()
 	teleportToTycoonEvent:FireServer()
@@ -130,7 +145,7 @@ shopButton.MouseButton1Click:Connect(function()
 
 end)
 petsButton.MouseButton1Click:Connect(function()
-	togglePanel(petsPanel)
+	togglePanel(creatureShopPanel)
 end)
 inventoryButton.MouseButton1Click:Connect(function()
 	togglePanel(inventoryPanel)
@@ -282,6 +297,7 @@ player.CharacterAdded:Connect(onCharacterAdded)
 -- Every clickable button in the HUD gets the same subtle "pop" on hover.
 local hoverButtons = {
 	plusButton,
+	gemPlusButton,
 	teleportToTycoonButton,
 	inventoryButton,
 	settingsButton,
@@ -301,7 +317,7 @@ for _, button in ipairs(hoverButtons) do
 end
 
 -- ===== Plus button press =====
--- The plus face sits plusDepth px above a darker base (see MainHUDBuilder),
+-- Each plus face sits `depth` px above a darker base (see MainHUDBuilder),
 -- and that strip of base is what reads as depth. Pressing slides the face
 -- down onto the base so the strip vanishes, like a key pushed in. Size goes
 -- back to rest as well, so a hovered (grown) face lands exactly on the base.
@@ -311,15 +327,20 @@ end
 -- back to rest if the press is dragged off the button. Each newer tween on
 -- the same properties replaces the older one, so the two never fight.
 local PLUS_PRESS_TWEEN_INFO = TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-local plusRestSize = plusButton.Size
-local plusPressedPosition = plusButton.Position + UDim2.fromOffset(0, Theme.cashHud.plusDepth)
 
-plusButton.MouseButton1Down:Connect(function()
-	TweenService:Create(plusButton, PLUS_PRESS_TWEEN_INFO, {
-		Size = plusRestSize,
-		Position = plusPressedPosition,
-	}):Play()
-end)
+local function wirePlusPress(button, depth)
+	local restSize = button.Size
+	local pressedPosition = button.Position + UDim2.fromOffset(0, depth)
+	button.MouseButton1Down:Connect(function()
+		TweenService:Create(button, PLUS_PRESS_TWEEN_INFO, {
+			Size = restSize,
+			Position = pressedPosition,
+		}):Play()
+	end)
+end
+
+wirePlusPress(plusButton, refs.plusDepth)
+wirePlusPress(gemPlusButton, refs.gemPlusDepth)
 
 -- ===== Shop button rainbow border =====
 -- One looping tween spins the stroke's gradient. Each repeat restarts from 0,
@@ -341,6 +362,7 @@ end)
 -- Only the CashHUDGroup buttons get tooltips (the icon-only ones benefit
 -- most, since they have no visible label of their own).
 Tooltip.attach(plusButton, "Add Cash")
+Tooltip.attach(gemPlusButton, "Add Gems")
 Tooltip.attach(teleportToTycoonButton, "Teleport to Tycoon")
 Tooltip.attach(inventoryButton, "Inventory")
 Tooltip.attach(settingsButton, "Settings")
@@ -351,6 +373,6 @@ Tooltip.attach(petsButton, "Pets")
 -- Previously LocalScripts parented to their panels. The panels are now built
 -- at runtime, so each is a module that takes the panel it should populate.
 require(script.Parent:WaitForChild("ShopPanelController"))(refs.shop.itemList)
-require(script.Parent:WaitForChild("CashPackPanelController"))(refs.cashPack.itemList)
+require(script.Parent:WaitForChild("CashPackPanelController"))(refs.cashPack.lists)
 
 

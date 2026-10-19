@@ -1,9 +1,11 @@
 local DataStoreService = game:GetService("DataStoreService")
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 
 local TycoonProgressService = require(script.Parent.TycoonProgressService)
 local TutorialProgressService = require(script.Parent.TutorialProgressService)
 local WorkerGiftCooldownService = require(script.Parent.WorkerGiftCooldownService)
+local PurchaseReceiptService = require(script.Parent.PurchaseReceiptService)
 
 -- v3 intentionally starts every player with a clean save.
 -- The old v2 store remains isolated and untouched for rollback if needed.
@@ -12,6 +14,106 @@ local playerDataStore = DataStoreService:GetDataStore(DATA_STORE_NAME)
 
 local AUTOSAVE_INTERVAL_SECONDS = 60
 local MAX_SAVE_ATTEMPTS = 3
+
+-- Session locking. Each save record carries a SessionLock naming the one
+-- player-session allowed to write it. Without it, a player who switches
+-- servers quickly can be loaded by the new server before the old server's
+-- leave-save lands, and the stale copy then overwrites the newer save --
+-- which would lose Robux purchases. Every save checks it still holds the
+-- lock; the leave-save releases it.
+--
+-- A lock untouched for this long belongs to a server that died; take it at once.
+local LOCK_STALE_SECONDS = AUTOSAVE_INTERVAL_SECONDS * 5
+-- Otherwise wait this long for the other server to release it, then take it
+-- anyway. That server's next save sees it lost the lock and writes nothing.
+local LOCK_WAIT_ATTEMPTS = 6
+local LOCK_RETRY_SECONDS = 5
+local SHUTDOWN_SAVE_TIMEOUT_SECONDS = 25
+
+-- Weak-keyed so entries disappear with the Player.
+local sessionIdByPlayer = setmetatable({}, { __mode = "k" })
+local saveBusy = setmetatable({}, { __mode = "k" })
+local sessionReleased = setmetatable({}, { __mode = "k" })
+local activeSaveCount = 0
+
+local function newLock(sessionId)
+	return {
+		SessionId = sessionId,
+		JobId = game.JobId,
+		Time = os.time(),
+	}
+end
+
+local function isHeldByAnotherSession(lock, sessionId)
+	return type(lock) == "table"
+		and lock.SessionId ~= sessionId
+		and type(lock.Time) == "number"
+		and os.time() - lock.Time < LOCK_STALE_SECONDS
+end
+
+-- Every real save writes Cash. A record without it only holds a lock, e.g.
+-- from a server that died before the player's first save, and must still
+-- read as a brand-new player (TutorialProgressService treats any saved table
+-- as a returning player).
+local function hasPlayerData(record)
+	return type(record) == "table" and record.Cash ~= nil
+end
+
+-- Loads the player's record and takes its session lock in one atomic write.
+-- Returns (loadSucceeded, savedData), where savedData is nil for a new player.
+local function loadAndLock(player, sessionId)
+	for attempt = 1, LOCK_WAIT_ATTEMPTS + 1 do
+		local force = attempt > LOCK_WAIT_ATTEMPTS
+		local blocked = false
+		local savedData = nil
+
+		local success, err = pcall(function()
+			playerDataStore:UpdateAsync(player.UserId, function(current)
+				local record = type(current) == "table" and current or {}
+				if not force and isHeldByAnotherSession(record.SessionLock, sessionId) then
+					blocked = true
+					savedData = nil
+					return nil
+				end
+				blocked = false
+				savedData = hasPlayerData(record) and record or nil
+				record.SessionLock = newLock(sessionId)
+				return record
+			end)
+		end)
+
+		if not success then
+			warn("Failed to load data for " .. player.Name .. ": " .. tostring(err))
+			return false, nil
+		end
+		if not blocked then
+			if force then
+				warn("Took over " .. player.Name .. "'s save from a server that did not release it in time.")
+			end
+			return true, savedData
+		end
+		if not player.Parent then
+			return false, nil
+		end
+		task.wait(LOCK_RETRY_SECONDS)
+	end
+	return false, nil
+end
+
+-- Used when the player leaves after the lock was taken but before loading
+-- finished, so the next server doesn't have to wait the lock out.
+local function releaseLock(player, sessionId)
+	pcall(function()
+		playerDataStore:UpdateAsync(player.UserId, function(current)
+			if type(current) ~= "table" or type(current.SessionLock) ~= "table"
+				or current.SessionLock.SessionId ~= sessionId then
+				return nil
+			end
+			current.SessionLock = nil
+			return current
+		end)
+	end)
+end
 
 local function getAssignedPlot(player)
 	local assignedPlotName = player:GetAttribute("AssignedPlotName")
@@ -70,15 +172,24 @@ Players.PlayerAdded:Connect(function(player)
 	gems.Value = 0
 	gems.Parent = gemData
 
-	-- Gems stored in the bank. Only BankZoneHandler moves gems into this pool.
+	-- Gems stored in the bank. BankZoneHandler deposits carried gems here, and
+	-- PurchaseReceiptService grants bought gems here.
 	local bankedGems = Instance.new("IntValue")
 	bankedGems.Name = "BankedGems"
 	bankedGems.Value = 0
 	bankedGems.Parent = gemData
 
-	local success, savedData = pcall(function()
-		return playerDataStore:GetAsync(player.UserId)
-	end)
+	local sessionId = HttpService:GenerateGUID(false)
+	sessionIdByPlayer[player] = sessionId
+	local success, savedData = loadAndLock(player, sessionId)
+
+	if not player.Parent then
+		-- Left while loading. Nothing was handed out, so nothing to save.
+		if success then
+			releaseLock(player, sessionId)
+		end
+		return
+	end
 
 	if success and type(savedData) == "table" then
 		cash.Value = tonumber(savedData.Cash) or 0
@@ -131,6 +242,10 @@ Players.PlayerAdded:Connect(function(player)
 	-- claimed" (which would let a rejoin bypass an active cooldown).
 	WorkerGiftCooldownService.Resolve(player, success, savedData)
 
+	if success then
+		PurchaseReceiptService.Resolve(player, savedData)
+	end
+
 	player:SetAttribute("DataLoaded", true)
 end)
 
@@ -175,27 +290,76 @@ local function getPlayerData(player)
 		PurchasedItems = purchasedItems,
 		Tutorial = TutorialProgressService.Serialize(player),
 		LastWorkerGiftClaim = WorkerGiftCooldownService.Serialize(player),
+		ProcessedReceipts = PurchaseReceiptService.Serialize(player),
 	}
 end
 
-local function savePlayer(player)
+local function onSessionLost(player)
+	player:SetAttribute("DataSessionLost", true)
+	warn("Stopped saving " .. player.Name .. ": their save was taken over by another session.")
+	if player.Parent then
+		player:Kick("Your data was opened on another server. Please rejoin.")
+	end
+end
+
+-- Pass releaseLock = true for the final save of a session.
+local function savePlayer(player, releaseLock)
+	-- Never save before loading finished: the values would still be defaults.
+	if not player:GetAttribute("DataLoaded") then
+		return false
+	end
 	if player:GetAttribute("DataLoadFailed") then
 		warn("Skipped saving " .. player.Name .. " because their data did not load successfully.")
 		return false
 	end
+	if player:GetAttribute("DataSessionLost") or sessionReleased[player] then
+		return false
+	end
 
+	activeSaveCount += 1
+	-- One save per player at a time, so an older payload can never land after
+	-- a newer one (e.g. an autosave racing a purchase save).
+	while saveBusy[player] do
+		task.wait(0.1)
+	end
+	if player:GetAttribute("DataSessionLost") or sessionReleased[player] then
+		activeSaveCount -= 1
+		return false
+	end
+	saveBusy[player] = true
+
+	local sessionId = sessionIdByPlayer[player]
 	local dataToSave = getPlayerData(player)
+	dataToSave.SessionLock = if releaseLock then nil else newLock(sessionId)
+
+	local saved = false
+	local lostLock = false
 	local lastError
 
 	for attempt = 1, MAX_SAVE_ATTEMPTS do
 		local success, err = pcall(function()
-			playerDataStore:UpdateAsync(player.UserId, function()
+			playerDataStore:UpdateAsync(player.UserId, function(current)
+				local lock = type(current) == "table" and current.SessionLock
+				if type(lock) ~= "table" or lock.SessionId ~= sessionId then
+					lostLock = true
+					return nil
+				end
+				lostLock = false
 				return dataToSave
 			end)
 		end)
+
 		if success then
-			player:SetAttribute("LastSaveTime", os.time())
-			return true
+			if lostLock then
+				onSessionLost(player)
+			else
+				saved = true
+				player:SetAttribute("LastSaveTime", os.time())
+				if releaseLock then
+					sessionReleased[player] = true
+				end
+			end
+			break
 		end
 
 		lastError = err
@@ -204,12 +368,19 @@ local function savePlayer(player)
 		end
 	end
 
-	warn("Failed to save data for " .. player.Name .. ": " .. tostring(lastError))
-	return false
+	if not saved and not lostLock then
+		warn("Failed to save data for " .. player.Name .. ": " .. tostring(lastError))
+	end
+
+	saveBusy[player] = nil
+	activeSaveCount -= 1
+	return saved
 end
 
+PurchaseReceiptService.Start(savePlayer)
+
 Players.PlayerRemoving:Connect(function(player)
-	savePlayer(player)
+	savePlayer(player, true)
 	TycoonProgressService.ForgetPlayer(player)
 end)
 
@@ -223,7 +394,14 @@ task.spawn(function()
 end)
 
 game:BindToClose(function()
+	-- Final saves run in parallel, and this also waits for leave-saves that
+	-- PlayerRemoving already started, so shutdown can't cut them off.
 	for _, player in ipairs(Players:GetPlayers()) do
-		savePlayer(player)
+		task.spawn(savePlayer, player, true)
+	end
+	task.wait()
+	local deadline = os.clock() + SHUTDOWN_SAVE_TIMEOUT_SECONDS
+	while activeSaveCount > 0 and os.clock() < deadline do
+		task.wait(0.1)
 	end
 end)
