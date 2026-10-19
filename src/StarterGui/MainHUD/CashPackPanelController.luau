@@ -5,6 +5,7 @@
 -- prompt. Same guard for placeholder Developer Product IDs as
 -- ShopPanelController. Granting happens server-side in PurchaseReceiptService.
 
+local ContentProvider = game:GetService("ContentProvider")
 local MarketplaceService = game:GetService("MarketplaceService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -16,6 +17,38 @@ local GemConfig = require(ReplicatedStorage:WaitForChild("GemConfig"))
 local ButtonHoverEffect = require(ReplicatedStorage:WaitForChild("ButtonHoverEffect"))
 local Theme = require(ReplicatedStorage:WaitForChild("UITheme"))
 local UISurface = require(ReplicatedStorage:WaitForChild("UISurface"))
+
+-- Fallback badge (pack size abbreviation, e.g. "5K", "1.2K") for a pack with
+-- no art, or whose art failed to load.
+local function createIconBadge(item, row, T)
+	local icon = Instance.new("Frame")
+	icon.Name = "Icon"
+	icon.AnchorPoint = Vector2.new(0, 0.5)
+	icon.Position = T.iconPosition
+	icon.Size = T.iconSize
+	icon.BackgroundColor3 = item.iconColor or T.iconBackground
+	icon.BorderSizePixel = 0
+	icon.Parent = row
+
+	local iconCorner = Instance.new("UICorner")
+	iconCorner.CornerRadius = T.iconCorner
+	iconCorner.Parent = icon
+
+	local iconLabel = Instance.new("TextLabel")
+	iconLabel.BackgroundTransparency = 1
+	iconLabel.Size = UDim2.new(1, 0, 1, 0)
+	iconLabel.Font = T.iconFont
+	iconLabel.TextSize = T.iconTextSize
+	iconLabel.TextColor3 = T.iconTextColor
+	iconLabel.TextStrokeColor3 = T.iconStrokeColor
+	iconLabel.TextStrokeTransparency = T.iconStrokeTransparency
+	iconLabel.Text = item.iconText
+	iconLabel.Parent = icon
+end
+
+local function fetchFailed(status)
+	return status == Enum.AssetFetchStatus.Failure or status == Enum.AssetFetchStatus.TimedOut
+end
 
 -- One purchase card. T is the card style (Theme.cashPackRow or
 -- Theme.gemPackRow); configName only names the config in warnings.
@@ -40,11 +73,12 @@ local function createPackRow(item, layoutOrder, itemList, T, configName)
 	rowStroke.Parent = row
 
 	if item.iconAssetId and item.iconAssetId ~= "" then
-		-- Cash-pile art. The slot clips an oversized ImageLabel rather than
+		-- Pack art. The slot clips an oversized ImageLabel rather than
 		-- sizing the label directly: ScaleType.Fit fits the whole source
 		-- square, transparent padding included, so on its own it would shrink
 		-- the pile to a fraction of the slot. Blowing the label up by
-		-- 1/iconImageCrop and clipping brings the padding back off-slot.
+		-- 1/iconImageCrop and clipping brings the padding back off-slot. A
+		-- style whose art needs no zoom sets the crop to (1, 1).
 		--
 		-- The zoom is one shared ratio, identical on every row, so the size
 		-- progression drawn into the art is preserved rather than doubled.
@@ -68,32 +102,34 @@ local function createPackRow(item, layoutOrder, itemList, T, configName)
 		icon.Image = item.iconAssetId
 		icon.ScaleType = Enum.ScaleType.Fit
 		icon.Parent = slot
+
+		-- If the art fails to download, swap the slot for the badge. Don't
+		-- rely on this for an image pending or rejected in moderation: those
+		-- can render as a blank square without the fetch ever failing.
+		local function swapToBadge()
+			if slot.Parent then
+				slot:Destroy()
+				createIconBadge(item, row, T)
+			end
+		end
+		if fetchFailed(ContentProvider:GetAssetFetchStatus(item.iconAssetId)) then
+			swapToBadge()
+		elseif not icon.IsLoaded then
+			local connection
+			connection = ContentProvider:GetAssetFetchStatusChangedSignal(item.iconAssetId):Connect(function(status)
+				if fetchFailed(status) then
+					connection:Disconnect()
+					swapToBadge()
+				elseif status == Enum.AssetFetchStatus.Success then
+					connection:Disconnect()
+				end
+			end)
+			slot.Destroying:Connect(function()
+				connection:Disconnect()
+			end)
+		end
 	else
-		-- Fallback badge (pack size abbreviation, e.g. "5K", "1M") for a pack
-		-- that has no art yet.
-		local icon = Instance.new("Frame")
-		icon.Name = "Icon"
-		icon.AnchorPoint = Vector2.new(0, 0.5)
-		icon.Position = T.iconPosition
-		icon.Size = T.iconSize
-		icon.BackgroundColor3 = item.iconColor or T.iconBackground
-		icon.BorderSizePixel = 0
-		icon.Parent = row
-
-		local iconCorner = Instance.new("UICorner")
-		iconCorner.CornerRadius = T.iconCorner
-		iconCorner.Parent = icon
-
-		local iconLabel = Instance.new("TextLabel")
-		iconLabel.BackgroundTransparency = 1
-		iconLabel.Size = UDim2.new(1, 0, 1, 0)
-		iconLabel.Font = T.iconFont
-		iconLabel.TextSize = T.iconTextSize
-		iconLabel.TextColor3 = T.iconTextColor
-		iconLabel.TextStrokeColor3 = T.iconStrokeColor
-		iconLabel.TextStrokeTransparency = T.iconStrokeTransparency
-		iconLabel.Text = item.iconText
-		iconLabel.Parent = icon
+		createIconBadge(item, row, T)
 	end
 
 	-- Name

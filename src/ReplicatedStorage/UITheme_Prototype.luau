@@ -928,6 +928,15 @@ Theme.gemPackRow.strokeTransparency = 0
 Theme.gemPackRow.nameColor = Theme.color.gemLight
 Theme.gemPackRow.iconBackground = Theme.color.gemDeep
 Theme.gemPackRow.discountText = nil
+-- The gem art gets one fixed square box, the same on all five cards, as tall
+-- as the cash slot and centred where that slot is, so the badge (iconPosition)
+-- and the name still line up. No zoom: measured from the art, the chest spans
+-- 0.88 of the image across and the sack 0.77 down, so the cash crop window
+-- (0.66 x 0.49) would cut off the top three tiers. At (1, 1) the PNGs'
+-- transparent padding does the centring and nothing is clipped.
+Theme.gemPackRow.iconImageSize = UDim2.fromOffset(72, 72)
+Theme.gemPackRow.iconImagePosition = UDim2.new(0, 16, 0.5, 0)
+Theme.gemPackRow.iconImageCrop = Vector2.new(1, 1)
 
 Theme.hover = {
 	buyButton = { scale = 1.1, lift = 3 },
