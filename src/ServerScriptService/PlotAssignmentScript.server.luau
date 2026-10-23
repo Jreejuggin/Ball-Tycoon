@@ -6,7 +6,6 @@ local TycoonProgressService = require(game.ServerScriptService.TycoonProgressSer
 local DOOR_OFFSET = 5 -- studs into the plot from the inner edge
 local SPAWN_HEIGHT_OFFSET = 2
 local TELEPORT_COOLDOWN = 1
-local DATA_LOAD_TIMEOUT_SECONDS = 10
 local RESTORING_PROGRESS_ATTR = "RestoringProgress"
 local RESTORE_EFFECT_SUPPRESSION_SECONDS = 1
 
@@ -82,12 +81,11 @@ local function getOwnedPlot(player)
 end
 
 local function waitForData(player)
-	local waited = 0
-	while player.Parent and not player:GetAttribute("DataLoaded") and waited < DATA_LOAD_TIMEOUT_SECONDS do
-		task.wait(0.1)
-		waited += 0.1
-	end
-	return player.Parent ~= nil and player:GetAttribute("DataLoaded") == true
+    -- Slow DataStore loads must still lead to assignment once ready.
+    while player.Parent and not player:GetAttribute("DataLoaded") do
+        task.wait(0.1)
+    end
+    return player.Parent ~= nil and player:GetAttribute("DataLoaded") == true
 end
 
 teleportEvent.OnServerEvent:Connect(function(player)
@@ -153,29 +151,6 @@ Players.PlayerAdded:Connect(function(player)
 end)
 
 Players.PlayerRemoving:Connect(function(player)
-	lastTeleportAt[player] = nil
-
-	-- AssignedPlotName intentionally remains on the departing Player until it is
-	-- destroyed. DataSaveScript uses it to capture progress even if this handler
-	-- happens to clear plot ownership first.
-	for index = 1, 10 do
-		local plot = workspace:FindFirstChild("P" .. index)
-		if plot and plot:GetAttribute("Owner") == player.UserId then
-			-- Preserve the departing player's state before clearing the shared plot.
-			-- DataSaveScript reads this snapshot even if its PlayerRemoving handler
-			-- runs after the live plot has already been reset.
-			local departureProgress = TycoonProgressService.CapturePlot(plot)
-			TycoonProgressService.SetDepartureProgress(player, departureProgress)
-
-			-- Reset while ownership still identifies the departing player. The
-			-- restoration flag keeps cleanup quiet, and releasing Owner last makes
-			-- the blank plot immediately available for the next assignment.
-			plot:SetAttribute(RESTORING_PROGRESS_ATTR, true)
-			TycoonProgressService.ResetPlot(plot)
-			plot:SetAttribute("UpgradeLevel", 1)
-			plot:SetAttribute("OwnerName", nil)
-			plot:SetAttribute("Owner", nil)
-			plot:SetAttribute(RESTORING_PROGRESS_ATTR, nil)
-		end
-	end
+    lastTeleportAt[player] = nil
+    -- DataSaveScript captures the whole save, then releases this player's plot.
 end)

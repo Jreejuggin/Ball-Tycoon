@@ -272,6 +272,11 @@ local function createRecord(tool)
 	record.shortcut = textLabel(button, "Shortcut", "", UDim2.fromOffset(4, 3), UDim2.fromOffset(12, 14), 10)
 	record.shortcut.TextColor3 = Color3.fromRGB(172, 180, 193)
 	record.shortcut.TextXAlignment = Enum.TextXAlignment.Left
+	record.stack = textLabel(button, "StackCount", "", UDim2.new(1, -42, 1, -24), UDim2.fromOffset(38, 20), 13)
+	record.stack.ZIndex = 3
+	record.stack.TextColor3 = Color3.fromRGB(255, 226, 128)
+	record.stack.TextStrokeTransparency = 0.2
+	record.stack.TextXAlignment = Enum.TextXAlignment.Right
 	local image = Instance.new("ImageLabel")
 	image.Name = "Icon"
 	image.BackgroundTransparency = 1
@@ -300,7 +305,7 @@ local function createRecord(tool)
 	for _, property in ipairs({ "Name", "TextureId" }) do
 		table.insert(record.connections, tool:GetPropertyChangedSignal(property):Connect(markPresentationDirty))
 	end
-	for _, attribute in ipairs({ "InventoryLevel", "InventoryDisplayName", "InventoryIcon", "InventoryPreviewRotation", "ItemId" }) do
+	for _, attribute in ipairs({ "InventoryLevel", "InventoryDisplayName", "InventoryIcon", "InventoryPreviewRotation", "ItemId", "StackCount" }) do
 		table.insert(record.connections, tool:GetAttributeChangedSignal(attribute):Connect(markPresentationDirty))
 	end
 	local function changedDescendant(descendant)
@@ -314,6 +319,9 @@ local function createRecord(tool)
 end
 
 local function updatePresentation(record)
+	local quantity = tonumber(record.tool:GetAttribute("StackCount"))
+	record.stack.Visible = quantity ~= nil
+	record.stack.Text = quantity and (tostring(math.floor(quantity)) .. "x") or ""
 	local level = tonumber(record.tool:GetAttribute("InventoryLevel"))
 	local displayName = record.tool:GetAttribute("InventoryDisplayName")
 	if level and level >= 1 then

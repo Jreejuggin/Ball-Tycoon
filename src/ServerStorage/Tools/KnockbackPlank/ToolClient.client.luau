@@ -3,6 +3,7 @@
 -- The client animates only presentation. The server still chooses the target,
 -- calculates damage, enforces cooldowns, and applies knockback.
 local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 
 local tool = script.Parent :: Tool
@@ -230,6 +231,10 @@ local function alignBladeHorizontal(rig: RigJoints)
 end
 
 local function playSwing(token: number)
+	local combo = Players.LocalPlayer:GetAttribute("PvPCombo") or 0
+	local expires = Players.LocalPlayer:GetAttribute("PvPComboExpiresAt") or 0
+	if workspace:GetServerTimeNow() > expires then combo = 0 end
+	local roll = combo == 1 and math.rad(14) or combo == 2 and math.rad(-18) or 0
 	local rig = findRig()
 	if not rig then
 		-- Preserve combat if Roblox has not created the grip joint yet.
@@ -249,7 +254,7 @@ local function playSwing(token: number)
 	-- prevents the handle from sliding or popping out of the player's hand.
 	local windupPose = makePose(
 		rig,
-		CFrame.Angles(math.rad(14), 0, math.rad(-3)),
+		CFrame.Angles(math.rad(combo == 2 and 30 or 14), 0, math.rad(-3) + roll),
 		CFrame.identity,
 		CFrame.identity
 	)
@@ -258,7 +263,7 @@ local function playSwing(token: number)
 	-- lowers only slightly while the torso remains on its existing animation.
 	local contactPose = makePose(
 		rig,
-		CFrame.Angles(math.rad(-90), 0, 0),
+		CFrame.Angles(math.rad(-90), 0, roll),
 		CFrame.Angles(math.rad(8), 0, 0),
 		CFrame.identity
 	)
@@ -266,7 +271,7 @@ local function playSwing(token: number)
 	-- Hold the forward blade while the arm settles a touch farther downward.
 	local followPose = makePose(
 		rig,
-		CFrame.Angles(math.rad(-90), 0, 0),
+		CFrame.Angles(math.rad(-90), 0, roll),
 		CFrame.Angles(math.rad(10), 0, 0),
 		CFrame.identity
 	)

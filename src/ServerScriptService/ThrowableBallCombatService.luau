@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("ThrowableBallConfig"))
 local CombatDamageService = require(script.Parent:WaitForChild("CombatDamageService"))
+local PvP = require(script.Parent:WaitForChild("PvPCombatService"))
 
 type Profile = {
 	Damage: number,
@@ -301,6 +302,7 @@ local function launch(player: Player, tool: Tool, record: WireRecord, aim: any)
 	local ownershipCheck = ownsBall
 	if not ownershipCheck or not ownershipCheck(player)
 		or not character or tool.Parent ~= character or record.player ~= player
+		or not PvP.CanAttack(player)
 		or not humanoid or humanoid.Health <= 0 or not root or not root:IsA("BasePart")
 		or record.handle.Parent ~= tool
 		or not isFiniteVector(root.Position) or not isFiniteVector(record.handle.Position)
