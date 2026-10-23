@@ -1,0 +1,30 @@
+{
+  "properties": {
+    "CanBeDropped": false,
+    "Grip": [
+      0.0,
+      -0.20000000298023224,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "SerializedOverrides": {
+      "BinaryString": ""
+    }
+  },
+  "attributes": {
+    "Consumable": true,
+    "InventoryDisplayName": "Shield",
+    "ItemId": "Orb_Protection",
+    "OrbType": "Protection",
+    "StackCount": 1.0
+  },
+  "className": "Tool"
+}

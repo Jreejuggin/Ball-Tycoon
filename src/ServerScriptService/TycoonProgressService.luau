@@ -3,8 +3,9 @@
 -- they follow the existing Activated / UpgradeLevel conventions.
 local TycoonProgressService = {}
 
-local loadedProgressByUserId = {}
-local departureProgressByUserId = {}
+-- Scope caches to the Player session so an old departure cannot affect a rejoin.
+local loadedProgressByPlayer = setmetatable({}, { __mode = "k" })
+local departureProgressByPlayer = setmetatable({}, { __mode = "k" })
 
 -- Plot purchase scripts are intentionally one-way while a player owns a plot:
 -- after a machine is bought, the script stops watching for Activated to become
@@ -97,24 +98,24 @@ local function findByRelativePath(plot, path)
 end
 
 function TycoonProgressService.SetLoadedProgress(player, progress)
-	loadedProgressByUserId[player.UserId] = type(progress) == "table" and progress or {}
+	loadedProgressByPlayer[player] = type(progress) == "table" and progress or {}
 end
 
 function TycoonProgressService.GetLoadedProgress(player)
-	return loadedProgressByUserId[player.UserId] or {}
+	return loadedProgressByPlayer[player] or {}
 end
 
 function TycoonProgressService.SetDepartureProgress(player, progress)
-	departureProgressByUserId[player.UserId] = progress
+	departureProgressByPlayer[player] = progress
 end
 
 function TycoonProgressService.GetDepartureProgress(player)
-	return departureProgressByUserId[player.UserId]
+	return departureProgressByPlayer[player]
 end
 
 function TycoonProgressService.ForgetPlayer(player)
-	loadedProgressByUserId[player.UserId] = nil
-	departureProgressByUserId[player.UserId] = nil
+	loadedProgressByPlayer[player] = nil
+	departureProgressByPlayer[player] = nil
 end
 
 function TycoonProgressService.CapturePlot(plot)

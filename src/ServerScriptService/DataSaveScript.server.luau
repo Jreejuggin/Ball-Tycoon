@@ -4,6 +4,7 @@ local Players = game:GetService("Players")
 local TycoonProgressService = require(script.Parent.TycoonProgressService)
 local TutorialProgressService = require(script.Parent.TutorialProgressService)
 local WorkerGiftCooldownService = require(script.Parent.WorkerGiftCooldownService)
+local OrbInventoryService = require(script.Parent.OrbInventoryService)
 
 -- v3 intentionally starts every player with a clean save.
 -- The old v2 store remains isolated and untouched for rollback if needed.
@@ -11,25 +12,7 @@ local DATA_STORE_NAME = "PlayerCashData_v3"
 local playerDataStore = DataStoreService:GetDataStore(DATA_STORE_NAME)
 
 local AUTOSAVE_INTERVAL_SECONDS = 60
-local MAX_SAVE_ATTEMPTS = 3
-
-local function getAssignedPlot(player)
-	local assignedPlotName = player:GetAttribute("AssignedPlotName")
-	if type(assignedPlotName) == "string" then
-		local assignedPlot = workspace:FindFirstChild(assignedPlotName)
-		if assignedPlot then
-			return assignedPlot
-		end
-	end
-
-	for index = 1, 10 do
-		local plot = workspace:FindFirstChild("P" .. index)
-		if plot and plot:GetAttribute("Owner") == player.UserId then
-			return plot
-		end
-	end
-	return nil
-end
+local SaveService = require(script.Parent.PlayerDataSaveService)
 
 local function restorePurchasedItems(player, savedItems)
 	local purchasedItems = Instance.new("Folder")
@@ -130,100 +113,24 @@ Players.PlayerAdded:Connect(function(player)
 	-- Same reasoning as above: a failed load must never look like "never
 	-- claimed" (which would let a rejoin bypass an active cooldown).
 	WorkerGiftCooldownService.Resolve(player, success, savedData)
+	OrbInventoryService.Resolve(player, success and savedData or nil)
 
 	player:SetAttribute("DataLoaded", true)
 end)
 
-local function getPlayerData(player)
-	local cash = player:FindFirstChild("leaderstats") and player.leaderstats:FindFirstChild("Cash")
-	local gemData = player:FindFirstChild("GemData")
-	local gems = gemData and gemData:FindFirstChild("Gems")
-	local bankedGems = gemData and gemData:FindFirstChild("BankedGems")
-	local plot = getAssignedPlot(player)
-
-	local purchasedItems = {}
-	local purchasedItemsFolder = player:FindFirstChild("PurchasedItems")
-	if purchasedItemsFolder then
-		for _, itemValue in ipairs(purchasedItemsFolder:GetChildren()) do
-			if itemValue:IsA("IntValue") and itemValue.Value > 0 then
-				purchasedItems[itemValue.Name] = itemValue.Value
-			end
-		end
-	end
-
-	local upgradeLevel = plot and tonumber(plot:GetAttribute("UpgradeLevel")) or 1
-	local centreLevel = math.clamp(math.floor(tonumber(player:GetAttribute("CentreLevel")) or 0), 0, 5)
-	local plotColor = player:GetAttribute("SavedPlotColor")
-	local serializedPlotColor = nil
-	if typeof(plotColor) == "Color3" then
-		serializedPlotColor = {
-			R = plotColor.R,
-			G = plotColor.G,
-			B = plotColor.B,
-		}
-	end
-
-	return {
-		Cash = cash and cash.Value or 0,
-		Gems = gems and gems.Value or 0,
-		BankedGems = bankedGems and bankedGems.Value or 0,
-		UpgradeLevel = upgradeLevel,
-		CentreLevel = centreLevel,
-		PlotColor = serializedPlotColor,
-		TycoonProgress = TycoonProgressService.GetDepartureProgress(player)
-			or TycoonProgressService.CapturePlot(plot),
-		PurchasedItems = purchasedItems,
-		Tutorial = TutorialProgressService.Serialize(player),
-		LastWorkerGiftClaim = WorkerGiftCooldownService.Serialize(player),
-	}
-end
-
-local function savePlayer(player)
-	if player:GetAttribute("DataLoadFailed") then
-		warn("Skipped saving " .. player.Name .. " because their data did not load successfully.")
-		return false
-	end
-
-	local dataToSave = getPlayerData(player)
-	local lastError
-
-	for attempt = 1, MAX_SAVE_ATTEMPTS do
-		local success, err = pcall(function()
-			playerDataStore:UpdateAsync(player.UserId, function()
-				return dataToSave
-			end)
-		end)
-		if success then
-			player:SetAttribute("LastSaveTime", os.time())
-			return true
-		end
-
-		lastError = err
-		if attempt < MAX_SAVE_ATTEMPTS then
-			task.wait(2 ^ (attempt - 1))
-		end
-	end
-
-	warn("Failed to save data for " .. player.Name .. ": " .. tostring(lastError))
-	return false
-end
-
+-- This is the sole owner of departure capture and plot release.
 Players.PlayerRemoving:Connect(function(player)
-	savePlayer(player)
-	TycoonProgressService.ForgetPlayer(player)
+    SaveService.ReleasePlot(player)
+    SaveService.Save(player, true)
 end)
 
 task.spawn(function()
-	while true do
-		task.wait(AUTOSAVE_INTERVAL_SECONDS)
-		for _, player in ipairs(Players:GetPlayers()) do
-			task.spawn(savePlayer, player)
-		end
-	end
+    while true do
+        task.wait(AUTOSAVE_INTERVAL_SECONDS)
+        for _, player in Players:GetPlayers() do
+            task.spawn(SaveService.Save, player, false)
+        end
+    end
 end)
 
-game:BindToClose(function()
-	for _, player in ipairs(Players:GetPlayers()) do
-		savePlayer(player)
-	end
-end)
+game:BindToClose(SaveService.Close)

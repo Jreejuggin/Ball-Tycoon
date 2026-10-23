@@ -1,5 +1,6 @@
 --!strict
--- Keeps plot perimeter collision synchronized with the Home Walls purchase.
+-- Keeps only the Walls group synchronized with the Home Walls purchase.
+-- Glass and Roof collision follow their own stages in StructureSequenceService.
 -- Empty, unowned, and pre-purchase plots remain fully walkable.
 local PLOT_COUNT = 10
 local WALL_MODEL_NAME = "PerimeterWall"
@@ -27,7 +28,7 @@ end
 
 local function applyWallCollision(wallModel: Instance, enabled: boolean)
 	for _, descendant in ipairs(wallModel:GetDescendants()) do
-		if descendant:IsA("BasePart") then
+		if descendant:IsA("BasePart") and descendant:GetAttribute("StructureGroup") == "Walls" then
 			setWallPartState(descendant, enabled)
 		end
 	end
@@ -43,7 +44,7 @@ local function wirePlot(plot: Instance): (number, boolean)
 
 	local partCount = 0
 	for _, descendant in ipairs(wallModel:GetDescendants()) do
-		if descendant:IsA("BasePart") then
+		if descendant:IsA("BasePart") and descendant:GetAttribute("StructureGroup") == "Walls" then
 			partCount += 1
 		end
 	end
@@ -54,7 +55,7 @@ local function wirePlot(plot: Instance): (number, boolean)
 
 	wallsActivated:GetPropertyChangedSignal("Value"):Connect(refresh)
 	wallModel.DescendantAdded:Connect(function(descendant)
-		if descendant:IsA("BasePart") then
+		if descendant:IsA("BasePart") and descendant:GetAttribute("StructureGroup") == "Walls" then
 			setWallPartState(descendant, wallsActivated.Value)
 		end
 	end)

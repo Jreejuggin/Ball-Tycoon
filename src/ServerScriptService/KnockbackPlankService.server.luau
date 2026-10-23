@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
 
 local CombatDamageService = require(script.Parent:WaitForChild("CombatDamageService"))
+local PvP = require(script.Parent:WaitForChild("PvPCombatService"))
 
 local PlotTheme = require(ReplicatedStorage:WaitForChild("PlotTheme"))
 local PurchaseEffectModule = require(ReplicatedStorage:WaitForChild("PurchaseEffectModule"))
@@ -175,7 +176,7 @@ local function findSwingTarget(player: Player, character: Model, root: BasePart)
 end
 
 local function processSwing(player: Player, tool: Tool)
-	if tool.Parent ~= player.Character then
+	if tool.Parent ~= player.Character or not PvP.CanAttack(player) then
 		return
 	end
 

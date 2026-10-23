@@ -2,6 +2,8 @@
 -- Shared server damage and temporary ragdoll behavior for Avatar weapons.
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local OrbEffects = require(script.Parent:WaitForChild("OrbEffectService"))
+local PvP = require(script.Parent:WaitForChild("PvPCombatService"))
 local CombatDamageService = {}
 local RAGDOLL_SECONDS = 1.25
 local DEFAULT_HORIZONTAL_KNOCKBACK = 184
@@ -251,7 +253,8 @@ function CombatDamageService.ValidateTarget(player: Player, character: Model): (
 	local root = character:FindFirstChild("HumanoidRootPart")
 	if not targetPlayer or targetPlayer == player or targetPlayer.Character ~= character
 		or not humanoid or humanoid.Health <= 0 or not root or not root:IsA("BasePart")
-		or character:FindFirstChildOfClass("ForceField") then
+		or character:FindFirstChildOfClass("ForceField")
+		or OrbEffects.IsProtectedCharacter(character) or PvP.IsEvading(character) then
 		return nil, nil
 	end
 	return humanoid, root
@@ -264,13 +267,16 @@ function CombatDamageService.ApplyHit(player: Player, tool: Tool, targetHumanoid
 	local validHumanoid, validRoot = CombatDamageService.ValidateTarget(player, targetCharacter)
 	if validHumanoid ~= targetHumanoid or validRoot ~= targetRoot
 		or damageAmount ~= damageAmount or damageAmount <= 0 or damageAmount == math.huge then return false end
+	local strike = PvP.BeforeHit(player, targetCharacter, tool, origin)
+	if not strike then return false end
+	damageAmount *= strike.damage
 	local horizontalKnockback = math.clamp(
-		tonumber(tool:GetAttribute("HorizontalKnockback")) or DEFAULT_HORIZONTAL_KNOCKBACK,
+		strike.knockback,
 		0,
 		200
 	)
 	local verticalKnockback = math.clamp(
-		tonumber(tool:GetAttribute("VerticalKnockback")) or DEFAULT_VERTICAL_KNOCKBACK,
+		strike.vertical,
 		0,
 		75
 	)
@@ -279,7 +285,7 @@ function CombatDamageService.ApplyHit(player: Player, tool: Tool, targetHumanoid
 		0,
 		60
 	)
-	local ragdollSeconds = math.clamp(tonumber(tool:GetAttribute("RagdollSeconds")) or RAGDOLL_SECONDS, 0.25, 3)
+	local ragdollSeconds = math.clamp(strike.ragdoll, 0, 3)
 
 	local horizontal = Vector3.new(
 		targetRoot.Position.X - origin.X,
@@ -295,18 +301,28 @@ function CombatDamageService.ApplyHit(player: Player, tool: Tool, targetHumanoid
 	horizontal = horizontal.Unit
 
 	targetHumanoid:TakeDamage(damageAmount)
-	startTemporaryRagdoll(targetCharacter, targetHumanoid, ragdollSeconds)
+	if ragdollSeconds > 0 then
+		startTemporaryRagdoll(targetCharacter, targetHumanoid, ragdollSeconds)
+	end
+	PvP.AfterHit(player, targetCharacter, strike, damageAmount)
+	if horizontalKnockback <= 0 and verticalKnockback <= 0 then return true end
 
 	-- Wait until the ragdoll constraints and server network ownership are active.
 	-- Setting assembly velocity directly prevents the target client or Humanoid
 	-- state transition from cancelling a same-frame impulse.
 	RunService.Heartbeat:Wait()
-	if targetRoot.Parent and targetHumanoid.Health > 0 then
+	if targetRoot.Parent and targetHumanoid.Health > 0
+		and not OrbEffects.IsProtectedCharacter(targetCharacter) then
 		targetRoot.AssemblyLinearVelocity =
 			horizontal * horizontalKnockback + Vector3.yAxis * verticalKnockback
 		targetRoot.AssemblyAngularVelocity = right * angularKnockback
 	end
 	return true
+end
+
+function CombatDamageService.RecoverCharacter(character: Model)
+	local state = ragdollStates[character]
+	if state then restoreRagdoll(character, state.token) end
 end
 
 return CombatDamageService
