@@ -914,7 +914,8 @@ local function buildShopPanel(gui)
 		Size = T.size,
 		Position = T.position,
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		BackgroundColor3 = Theme.panel.background,
+		-- The shared panel dark unless the theme gives the Shop its own body.
+		BackgroundColor3 = T.background or Theme.panel.background,
 		BorderSizePixel = 0,
 		ZIndex = 10,
 		Visible = false,

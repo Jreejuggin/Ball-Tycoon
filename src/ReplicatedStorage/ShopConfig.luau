@@ -9,6 +9,10 @@
 -- Once created, copy each product's ID here. Until then, the Buy button
 -- will warn in the output instead of opening the purchase prompt, so
 -- nothing breaks or errors out during testing.
+--
+-- `iconAssetId` is the item art, shown in one fixed square box on every row.
+-- `iconText` and `iconColor` are the fallback: the row shows that coloured
+-- badge instead when iconAssetId is nil or the image fails to load.
 
 local ShopConfig = {
 	{
@@ -18,6 +22,7 @@ local ShopConfig = {
 		productId = 0, -- TODO: replace with real Developer Product ID
 		iconText = "AC",
 		iconColor = Color3.fromRGB(70, 190, 90),
+		iconAssetId = "rbxassetid://95639547701870",
 	},
 	{
 		id = "TwoXCash",
@@ -26,6 +31,7 @@ local ShopConfig = {
 		productId = 0, -- TODO: replace with real Developer Product ID
 		iconText = "2X",
 		iconColor = Color3.fromRGB(230, 180, 40),
+		iconAssetId = "rbxassetid://116033583361228",
 	},
 	{
 		id = "InfiniteCash",
@@ -34,6 +40,7 @@ local ShopConfig = {
 		productId = 0, -- TODO: replace with real Developer Product ID
 		iconText = "\226\136\158", -- infinity symbol
 		iconColor = Color3.fromRGB(160, 90, 220),
+		iconAssetId = "rbxassetid://114361454396807",
 	},
 	{
 		id = "MegaDropper",
@@ -42,6 +49,7 @@ local ShopConfig = {
 		productId = 0, -- TODO: replace with real Developer Product ID
 		iconText = "MD",
 		iconColor = Color3.fromRGB(230, 110, 50),
+		iconAssetId = "rbxassetid://134767734805411",
 	},
 	{
 		id = "GoldenDropper",
@@ -50,6 +58,7 @@ local ShopConfig = {
 		productId = 0, -- TODO: replace with real Developer Product ID
 		iconText = "GD",
 		iconColor = Color3.fromRGB(235, 200, 60),
+		iconAssetId = "rbxassetid://76341043217050",
 	},
 }
 
