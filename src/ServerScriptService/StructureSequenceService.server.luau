@@ -13,6 +13,12 @@
 -- All money handling, ownership checks and state writes happen here on the
 -- server. The client never sends a purchase request; the pad is driven by
 -- Touched, and clients only read state for the floating label and ghost preview.
+--
+-- Second floor: SecondFloorService builds a copy of the Home Centre at
+-- SecondFloor/CentreSlots/Centre02_Home. Once a plot's second floor is built,
+-- this service runs that copy too, with the same logic. Floor-2 structures use
+-- their own "_F2" structure groups, so the two floors never affect each other.
+-- Stages whose slot doesn't exist on floor 2 (the Laser Door) are skipped there.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -42,6 +48,7 @@ local PREVIEW_MODE_PURCHASE = "Purchase"
 local PURCHASE_COOLDOWN_SECONDS = 1.5
 local STEP_OFF_MARGIN = 1.5
 local POLL_INTERVAL = 0.5
+local DEFAULT_COMPLETION_MESSAGE = "All Level 1 Home Upgrades Implemented!"
 
 --------------------------------------------------------------------
 -- Helpers
@@ -110,11 +117,11 @@ local function setPartsVisible(parts, visible)
 end
 
 --------------------------------------------------------------------
--- Per-plot controller
+-- Per-Home-Centre controller
 --------------------------------------------------------------------
-local function wirePlot(plot)
-	local centreSlots = plot:FindFirstChild("CentreSlots")
-	local homeCentre = centreSlots and centreSlots:FindFirstChild("Centre02_Home")
+-- skipMissingSlots: floor 1 requires every slot in ORDER; floor 2 runs only
+-- the slots it actually has.
+local function wireHomeCentre(plot, homeCentre, skipMissingSlots)
 	local structureSlots = homeCentre and homeCentre:FindFirstChild("StructureSlots")
 	local pad = homeCentre and homeCentre:FindFirstChild("StructureBuyPad")
 	local homeActivated = homeCentre and homeCentre:FindFirstChild("Activated")
@@ -185,7 +192,7 @@ local function wirePlot(plot)
 	)
 	configureCompletionText(
 		"MessageText",
-		"All Level 1 Home Upgrades Implemented!",
+		homeCentre:GetAttribute("CompletionMessage") or DEFAULT_COMPLETION_MESSAGE,
 		Color3.new(1, 1, 1),
 		UDim2.new(1, 0, 0.58, 0),
 		UDim2.fromScale(0, 0.42)
@@ -194,27 +201,32 @@ local function wirePlot(plot)
 	-- Build the stage table once. Each stage caches the objects it needs so the
 	-- polling loop never re-walks the tree.
 	local stages = {}
-	for index, slotName in ipairs(ORDER) do
+	for _, slotName in ipairs(ORDER) do
 		local slot = structureSlots:FindFirstChild(slotName)
-		local slotPad = slot and slot:FindFirstChild("BuyPad")
-		local activated = slotPad and slotPad:FindFirstChild("Activated")
-		local price = slotPad and slotPad:FindFirstChild("Price")
-		local group = slot and slot:FindFirstChild("StructureGroup")
+		if slot or not skipMissingSlots then
+			local slotPad = slot and slot:FindFirstChild("BuyPad")
+			local activated = slotPad and slotPad:FindFirstChild("Activated")
+			local price = slotPad and slotPad:FindFirstChild("Price")
+			local group = slot and slot:FindFirstChild("StructureGroup")
 
-		if not (activated and group) then
-			warn("[StructureSequenceService] " .. plot.Name
-				.. " is missing configuration for " .. slotName .. " - skipping plot.")
-			return false
+			if not (activated and group) then
+				warn("[StructureSequenceService] " .. plot.Name
+					.. " is missing configuration for " .. slotName .. " - skipping plot.")
+				return false
+			end
+
+			table.insert(stages, {
+				name = slotName,
+				group = group.Value,
+				activated = activated,
+				price = price and price.Value or 0,
+				parts = collectParts(plot, group.Value),
+				isVisible = nil,
+			})
 		end
-
-		stages[index] = {
-			name = slotName,
-			group = group.Value,
-			activated = activated,
-			price = price and price.Value or 0,
-			parts = collectParts(plot, group.Value),
-			isVisible = nil,
-		}
+	end
+	if #stages == 0 then
+		return false
 	end
 
 	local purchaseLocked = false
@@ -397,6 +409,26 @@ local function wirePlot(plot)
 	return true
 end
 
+local function wirePlot(plot)
+	local centreSlots = plot:FindFirstChild("CentreSlots")
+	local homeCentre = centreSlots and centreSlots:FindFirstChild("Centre02_Home")
+	return wireHomeCentre(plot, homeCentre, false)
+end
+
+-- Waits for SecondFloorService to finish this plot, then runs its floor-2
+-- Home Centre. Plots without a second floor simply never get one wired.
+local function wireSecondFloorWhenBuilt(plot)
+	while not plot:GetAttribute("SecondFloorBuilt") do
+		plot:GetAttributeChangedSignal("SecondFloorBuilt"):Wait()
+	end
+	local secondFloor = plot:FindFirstChild("SecondFloor")
+	local centreSlots = secondFloor and secondFloor:FindFirstChild("CentreSlots")
+	local homeCentre = centreSlots and centreSlots:FindFirstChild("Centre02_Home")
+	if not wireHomeCentre(plot, homeCentre, true) then
+		warn("[StructureSequenceService] " .. plot.Name .. " floor-2 Home Centre could not be wired.")
+	end
+end
+
 --------------------------------------------------------------------
 -- Boot
 --------------------------------------------------------------------
@@ -406,6 +438,7 @@ for _, plot in ipairs(workspace:GetChildren()) do
 		if wirePlot(plot) then
 			wired += 1
 		end
+		task.spawn(wireSecondFloorWhenBuilt, plot)
 	end
 end
 
