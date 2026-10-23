@@ -32,6 +32,17 @@ SecondFloorConfig.Centres = {
 SecondFloorConfig.WorkerCentreRequirement = "Cubicles"
 SecondFloorConfig.WorkerCentreRequirementText = "Buy a row of cubicles"
 
+-- Floor 2's Worker Centre gets a decorative copy of floor 1's Worker Centre
+-- layout, one storey up: same props, same spots. They have no purchase pads
+-- and no scripts. They appear as ghosts once the floor-2 Worker Centre can be
+-- bought, and turn solid once it is bought. Paths are relative to the plot.
+SecondFloorConfig.WorkerCentreLayout = {
+	{ "HiringKiosk" },
+	{ "CentreSlots", "Centre01_Worker", "Upgrades", "WorkerSpeedUpgrade", "WorkerSpeedSign" },
+	{ "CentreSlots", "Centre01_Worker", "WorkerNotesGiftsStation" },
+}
+SecondFloorConfig.LayoutFolderName = "Layout" -- folder inside the floor-2 Worker Centre
+
 -- The floor-2 Home Centre sells its structures from one pad, in this order,
 -- exactly like floor 1 (StructureSequenceService). The Laser Door is left out
 -- because floor 2's entrance is the staircase. GroupSuffix keeps these

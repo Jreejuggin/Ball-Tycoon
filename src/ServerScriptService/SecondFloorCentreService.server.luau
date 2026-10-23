@@ -19,8 +19,10 @@
 	    CentreLevel attribute is never touched, so the two floors stay separate.
 
 	Upgrades inside the centres: the Home Centre's structures (walls, glass,
-	roof, lights) are sold on floor 2 by StructureSequenceService. The other
-	centres' floor-1 upgrades are not copied: Worker hiring serves floor 1's
+	roof, lights) are sold on floor 2 by StructureSequenceService. The Worker
+	Centre shows a decorative copy of floor 1's layout (Hiring Kiosk, speed
+	sign, notes & gifts station), ghosted while available and solid once
+	bought. The other centres' floor-1 upgrades are not copied: Worker hiring serves floor 1's
 	droppers, and Avatar items are per-player tools and boosts, so second copies
 	would charge again for things the player already owns. Orb and Pet have no
 	upgrades yet. Their floor-2 zones are ready for upgrades when designed.
@@ -81,6 +83,60 @@ local function setGuiEnabled(gui, enabled)
 end
 
 ---------------------------------------------------------------------------
+-- Decorative layout props (floor-2 Worker Centre)
+-- Same three looks CentreZoneService gives floor 1's Hiring Kiosk:
+--   Hidden  - centre locked (or floor 2 not bought): invisible, no collision.
+--   Ghost   - centre available: see-through preview; collision proxies solid.
+--   Visible - centre bought: solid look; collision proxies solid.
+-- SecondFloorService records each part's SolidTransparency and whether it is
+-- a collision proxy (LayoutCollision) when it builds the copy.
+---------------------------------------------------------------------------
+
+local function collectLayoutParts(centre)
+	local parts = {}
+	local folder = centre:FindFirstChild(Config.LayoutFolderName)
+	if folder then
+		for _, descendant in ipairs(folder:GetDescendants()) do
+			if descendant:IsA("BasePart") then
+				table.insert(parts, descendant)
+			end
+		end
+	end
+	return parts
+end
+
+local function applyLayoutMode(parts, mode)
+	for _, part in ipairs(parts) do
+		local isCollision = part:GetAttribute("LayoutCollision") == true
+		local solid = part:GetAttribute("SolidTransparency") or 0
+
+		if mode == "Hidden" then
+			part.Transparency = 1
+			part.CanCollide = false
+			part.CanQuery = false
+			part.CastShadow = false
+		elseif isCollision then
+			-- Invisible blocker, active whenever the prop is shown.
+			part.Transparency = 1
+			part.CanCollide = true
+			part.CanQuery = true
+			part.CastShadow = false
+		elseif mode == "Ghost" then
+			part.Transparency = math.max(solid, Config.GhostTransparency)
+			part.CanCollide = false
+			part.CanQuery = false
+			part.CastShadow = false
+		else -- Visible
+			part.Transparency = solid
+			part.CanCollide = false
+			part.CanQuery = false
+			part.CastShadow = solid < 1
+		end
+		part.CanTouch = false
+	end
+end
+
+---------------------------------------------------------------------------
 -- Per-centre records
 ---------------------------------------------------------------------------
 
@@ -126,6 +182,8 @@ local function makeRecord(centre)
 		priceText = priceGui and priceGui:FindFirstChild("PriceText"),
 		edges = edges,
 		otherParts = otherParts,
+		layoutParts = collectLayoutParts(centre),
+		layoutMode = nil, -- last applied mode, so the 0.5s poll doesn't rewrite parts
 		processing = false,
 	}
 end
@@ -242,6 +300,12 @@ local function setupPlot(plot)
 		if record.status and record.status:IsA("StringValue") then
 			-- StructureSequenceService reads "Available" for its Walls preview.
 			record.status.Value = state == "Hidden" and "Locked" or state
+		end
+
+		local layoutMode = (state == "Purchased" and "Visible") or (state == "Available" and "Ghost") or "Hidden"
+		if #record.layoutParts > 0 and layoutMode ~= record.layoutMode then
+			record.layoutMode = layoutMode
+			applyLayoutMode(record.layoutParts, layoutMode)
 		end
 
 		if state == "Hidden" then

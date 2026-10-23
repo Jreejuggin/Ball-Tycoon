@@ -452,8 +452,9 @@ local function buildFloorPad(padSource, floorTop, parent)
 end
 
 -- What each floor-2 centre copies from its first-floor original: its values,
--- zone markings and purchase pad. Upgrade stations, furniture, worker hiring and
--- gift stations stay on floor 1 (see SecondFloorCentreService for why).
+-- zone markings and purchase pad. Working upgrade stations stay on floor 1
+-- (see SecondFloorCentreService for why); the Worker Centre's props are added
+-- separately as a decorative layout (buildWorkerCentreLayout).
 local CENTRE_KEEP = {
 	Activated = true,
 	Price = true,
@@ -500,6 +501,105 @@ local function hideCentre(centre)
 		elseif descendant:IsA("SurfaceGui") or descendant:IsA("BillboardGui") then
 			descendant.Enabled = false
 		end
+	end
+end
+
+-- Things a decorative layout copy must not carry over from floor 1:
+--   * values (Activated, Price, UpgradeLevel...), so TycoonProgressService
+--     never saves them and no service mistakes them for a real purchase;
+--   * purchase pads, prompts and click detectors, so nothing can be bought;
+--   * runtime label anchors (small hidden parts holding a BillboardGui that
+--     WorkerCountDisplayService / WorkerNotesGiftsStationService add on floor 1)
+--     and any other billboards, so no floor-1 counters or prices show up here.
+local LAYOUT_STRIP_CLASSES = { "ValueBase", "BaseScript", "ProximityPrompt", "ClickDetector" }
+
+local function stripForLayout(root)
+	local buyPad = root:FindFirstChild("BuyPad")
+	if buyPad then
+		buyPad:Destroy()
+	end
+	for _, descendant in ipairs(root:GetDescendants()) do
+		if descendant.Parent == nil then
+			continue -- already removed with its parent
+		end
+		if descendant:IsA("BasePart") and descendant:FindFirstChildWhichIsA("BillboardGui") then
+			descendant:Destroy()
+			continue
+		end
+		if descendant:IsA("BillboardGui") then
+			descendant:Destroy()
+			continue
+		end
+		for _, className in ipairs(LAYOUT_STRIP_CLASSES) do
+			if descendant:IsA(className) then
+				descendant:Destroy()
+				break
+			end
+		end
+	end
+	-- Runtime attributes on the model itself (e.g. WorkersUnlocked). Names
+	-- starting with "RBX" are reserved by Roblox (import data) and can't be
+	-- changed by scripts, so they are left alone.
+	for name in pairs(root:GetAttributes()) do
+		if string.sub(name, 1, 3) ~= "RBX" then
+			root:SetAttribute(name, nil)
+		end
+	end
+end
+
+-- Records how each layout part looks when its centre is bought. This is fixed
+-- by role rather than read from floor 1, because floor 1's services may have
+-- already hidden or ghosted those props when this copy is made:
+--   * Collision proxies: invisible but solid (same as on floor 1).
+--   * Everything else: visible and walk-through. The gift station keeps its
+--     own "unlocked" transparency attribute when it has one.
+-- Every part starts hidden; SecondFloorCentreService applies the states.
+local function prepareLayoutParts(model)
+	local collision = model:FindFirstChild("Collision")
+	for _, part in ipairs(model:GetDescendants()) do
+		if not part:IsA("BasePart") then
+			continue
+		end
+		local isCollision = collision ~= nil and part:IsDescendantOf(collision)
+		local solid = 0
+		if isCollision then
+			solid = 1
+		elseif typeof(part:GetAttribute("WorkerGiftsUnlockedTransparency")) == "number" then
+			solid = part:GetAttribute("WorkerGiftsUnlockedTransparency")
+		end
+		part:SetAttribute("SolidTransparency", solid)
+		part:SetAttribute("LayoutCollision", isCollision)
+		part.Anchored = true
+		part.Transparency = 1
+		part.CanCollide = false
+		part.CanTouch = false
+		part.CanQuery = false
+		part.CastShadow = false
+	end
+end
+
+-- Copies floor 1's Worker Centre props (Config.WorkerCentreLayout) one storey
+-- up into <floor-2 Worker Centre>/Layout. ThemedModel and PlotThemeAccent tags
+-- are kept, so PlotThemeService colors the copies like the originals.
+local function buildWorkerCentreLayout(plot, centre, storey)
+	local folder = Instance.new("Folder")
+	folder.Name = Config.LayoutFolderName
+	folder.Parent = centre
+
+	for _, path in ipairs(Config.WorkerCentreLayout) do
+		local source = findChildPath(plot, table.unpack(path))
+		if not (source and source:IsA("Model")) then
+			warn(("[SecondFloorService] %s has no %s; left out of the floor-2 Worker Centre."):format(
+				plot.Name,
+				table.concat(path, ".")
+			))
+			continue
+		end
+		local copy = source:Clone()
+		stripForLayout(copy)
+		liftParts(copy, storey)
+		prepareLayoutParts(copy)
+		copy.Parent = folder
 	end
 end
 
@@ -625,6 +725,10 @@ local function buildCentres(plot, floorTop, storey, secondFloor)
 		end
 
 		hideCentre(centre)
+		-- Built after hideCentre: layout parts record their own solid look.
+		if centreName == "Centre01_Worker" then
+			buildWorkerCentreLayout(plot, centre, storey)
+		end
 		centre.Parent = folder
 	end
 	return folder, homeSlots
