@@ -48,7 +48,22 @@ Theme.color = {
 	gemLight = Color3.fromHex("#C9A4FF"),
 	gemDeep = Color3.fromHex("#8B4FE8"),
 	gemOutline = Color3.fromHex("#3D1A6B"),
-	gold = Color3.fromRGB(255, 205, 60),
+
+	-- The Shop panel is red, as the purchase panel's tabs are green and violet.
+	-- Its Buy buttons stay green too, for the same reason.
+	shopRedLight = Color3.fromHex("#F2635C"),
+	shopRedDeep = Color3.fromHex("#C42A32"),
+	-- Warm coral rather than pure red, for item names.
+	shopRedText = Color3.fromHex("#FF9E8C"),
+	-- Dark on purpose. Beside the bright green Buy buttons it is lightness, not
+	-- hue, that keeps the two apart for red/green colour-blind players, so do
+	-- not lighten this (or darken the Buy button).
+	shopRedBorder = Color3.fromHex("#8E2A32"),
+	shopRedScroll = Color3.fromHex("#E04A4A"),
+	shopRedOutline = Color3.fromHex("#6B1118"),
+	shopRedBody = Color3.fromHex("#1F1416"),
+
+	gold =Color3.fromRGB(255, 205, 60),
 	mutedGrey = Color3.fromRGB(89, 92, 102),
 }
 
@@ -519,6 +534,26 @@ Theme.shopHeader = {
 	},
 }
 
+-- The Shop panel's own header: Theme.shopHeader in red, with the same stripes
+-- at the same strength as the purchase panel's green and violet tabs. Ball,
+-- Creature and Gear keep the shared grey header.
+Theme.shopPanelHeader = table.clone(Theme.shopHeader)
+Theme.shopPanelHeader.titleBarSurface = table.clone(Theme.shopHeader.titleBarSurface)
+Theme.shopPanelHeader.titleBarSurface.gradientTop = Theme.color.shopRedLight
+Theme.shopPanelHeader.titleBarSurface.gradientBottom = Theme.color.shopRedDeep
+Theme.shopPanelHeader.titleBarSurface.depthColor = Theme.color.shopRedOutline
+-- The X is the shared red X with its colours swapped: the grey of the shared
+-- header (still worn by Ball, Creature and Gear) with red stripes over it. A
+-- red X on this red bar would lose the contrast that makes it read as "close".
+-- The stripes are stronger than the black ones elsewhere (0.5 rather than 0.8)
+-- because a light colour over grey needs more weight to show.
+Theme.shopPanelHeader.closeSurface = table.clone(Theme.shopHeader.closeSurface)
+Theme.shopPanelHeader.closeSurface.gradientTop = Theme.shopHeader.titleBarSurface.gradientTop
+Theme.shopPanelHeader.closeSurface.gradientBottom = Theme.shopHeader.titleBarSurface.gradientBottom
+Theme.shopPanelHeader.closeSurface.depthColor = Theme.shopHeader.titleBarSurface.depthColor
+Theme.shopPanelHeader.closeSurface.patternColor = Theme.color.shopRedLight
+Theme.shopPanelHeader.closeSurface.patternTransparency = 0.5
+
 Theme.shopPanel = {
 	size = UDim2.new(0, 380, 0, 420),
 	position = UDim2.new(0.5, 0, 0.5, 0),
@@ -526,17 +561,21 @@ Theme.shopPanel = {
 	-- and gives Theme.shopHeader's bleed the gap it cancels at the top.
 	padding = 14,
 	closeCorner = 8,
+	background = Theme.color.shopRedBody,
 
 	-- The cash panel's outline, so the white edges inside have a matching one
-	-- around the panel. Overrides Theme.panel's grey for this panel only.
+	-- around the panel. Overrides Theme.panel's grey for this panel only. Left
+	-- white rather than red: the purchase panel keeps this same white outline
+	-- on its gem tab too.
 	strokeColor = Color3.fromRGB(232, 240, 236),
 	strokeThickness = 2,
 	strokeTransparency = 0,
 	-- 54 rather than 46: titleBarHeight 44 plus the same 10px gap the flat 36px
 	-- bar left behind it. The cash panel's offset exactly.
 	listTopOffset = 54,
-	scrollBarColor = Theme.itemList.goldScrollBar,
-	header = Theme.shopHeader,
+	scrollBarColor = Theme.color.shopRedScroll,
+	header = Theme.shopPanelHeader,
+	-- row = Theme.shopRow, set below once Theme.row exists.
 }
 
 Theme.petsPanel = {
@@ -811,6 +850,24 @@ Theme.row = {
 		ColorSequenceKeypoint.new(1, Color3.fromRGB(50, 160, 60)),
 	}),
 }
+
+-- The Shop panel's rows: Theme.row with red borders and coral names. The Buy
+-- button and the white price are Theme.row's, unchanged. The MiddleShops rows
+-- keep Theme.row.
+Theme.shopRow = table.clone(Theme.row)
+Theme.shopRow.strokeColor = Theme.color.shopRedBorder
+-- Solid, as on the gem cards, so the border is shopRedBorder itself rather than
+-- a blend of it with the row.
+Theme.shopRow.strokeTransparency = 0
+Theme.shopRow.nameColor = Theme.color.shopRedText
+-- The item art gets one fixed square box, the same on every row, and the PNGs'
+-- transparent padding does the centring (crop (1, 1), no zoom). Centred on the
+-- fallback badge (iconPosition, 60px at x 10), so a row that falls back to the
+-- badge keeps its icon in the same place.
+Theme.shopRow.iconImageSize = UDim2.fromOffset(64, 64)
+Theme.shopRow.iconImagePosition = UDim2.new(0, 8, 0.5, 0)
+Theme.shopRow.iconImageCrop = Vector2.new(1, 1)
+Theme.shopPanel.row = Theme.shopRow
 
 -- Cash-pack rows: same geometry as Theme.row, green palette, plus a discount
 -- badge and a bottom-anchored Buy button.

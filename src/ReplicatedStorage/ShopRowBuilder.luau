@@ -23,6 +23,7 @@ local Players = game:GetService("Players")
 local ButtonHoverEffect = require(ReplicatedStorage:WaitForChild("ButtonHoverEffect"))
 local Theme = require(ReplicatedStorage:WaitForChild("UITheme"))
 local UISurface = require(ReplicatedStorage:WaitForChild("UISurface"))
+local RowIcon = require(ReplicatedStorage:WaitForChild("RowIcon"))
 
 local player = Players.LocalPlayer
 
@@ -43,9 +44,7 @@ local function defaultRobuxBuy(item, logPrefix)
 	MarketplaceService:PromptProductPurchase(player, item.productId)
 end
 
-local function createRow(itemList, item, layoutOrder, logPrefix, onBuy)
-	local T = Theme.row
-
+local function createRow(itemList, item, layoutOrder, logPrefix, onBuy, T)
 	local row = Instance.new("Frame")
 	row.Name = item.id .. "Row"
 	row.LayoutOrder = layoutOrder
@@ -64,30 +63,8 @@ local function createRow(itemList, item, layoutOrder, logPrefix, onBuy)
 	rowStroke.Transparency = T.strokeTransparency
 	rowStroke.Parent = row
 
-	-- Icon badge
-	local icon = Instance.new("Frame")
-	icon.Name = "Icon"
-	icon.AnchorPoint = Vector2.new(0, 0.5)
-	icon.Position = T.iconPosition
-	icon.Size = T.iconSize
-	icon.BackgroundColor3 = item.iconColor
-	icon.BorderSizePixel = 0
-	icon.Parent = row
-
-	local iconCorner = Instance.new("UICorner")
-	iconCorner.CornerRadius = T.iconCorner
-	iconCorner.Parent = icon
-
-	local iconLabel = Instance.new("TextLabel")
-	iconLabel.BackgroundTransparency = 1
-	iconLabel.Size = UDim2.new(1, 0, 1, 0)
-	iconLabel.Font = T.iconFont
-	iconLabel.TextSize = T.iconTextSize
-	iconLabel.TextColor3 = T.iconTextColor
-	iconLabel.TextStrokeColor3 = T.iconStrokeColor
-	iconLabel.TextStrokeTransparency = T.iconStrokeTransparency
-	iconLabel.Text = item.iconText
-	iconLabel.Parent = icon
+	-- Item art, or the coloured badge when there is none.
+	RowIcon.create(item, row, T)
 
 	-- Name
 	local nameLabel = Instance.new("TextLabel")
@@ -187,7 +164,12 @@ end
 -- `logPrefix` is cosmetic, e.g. "[BallShop]", used in warnings.
 -- `onBuy(item)` is optional -- pass it to override the default Robux
 -- purchase flow (e.g. to fire a RemoteEvent for an in-game Cash purchase).
-function ShopRowBuilder.buildRows(itemList, config, logPrefix, onBuy)
+-- `style` is optional -- a row style table shaped like Theme.row, for a panel
+-- whose rows differ from the shared look (the Shop panel's red rows). Omitted,
+-- or nil in the active theme, it falls back to Theme.row.
+function ShopRowBuilder.buildRows(itemList, config, logPrefix, onBuy, style)
+	local T = style or Theme.row
+
 	-- Clear any existing rows first (safe to call more than once).
 	for _, child in ipairs(itemList:GetChildren()) do
 		if child:IsA("Frame") then
@@ -196,7 +178,7 @@ function ShopRowBuilder.buildRows(itemList, config, logPrefix, onBuy)
 	end
 
 	for index, item in ipairs(config) do
-		createRow(itemList, item, index, logPrefix, onBuy)
+		createRow(itemList, item, index, logPrefix, onBuy, T)
 	end
 end
 
