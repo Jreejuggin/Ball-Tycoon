@@ -17,7 +17,9 @@
 	  * Every purchase is an "Activated" / "UpgradeLevel" value inside the plot,
 	    which TycoonProgressService already saves, restores and resets.
 	  * Accent parts carry the PlotThemeAccent tag, so plot colors apply.
-	CubicleWorkstationService runs the cubicles this script builds.
+	CubicleWorkstationService runs the cubicles this script builds, and the office
+	tiers after them (Senior Workers, Team Lead, Department Manager) that
+	SecondFloorOfficeBuilder adds.
 
 	States per plot:
 	  Hidden    - Home Centre level 1 not finished: nothing of floor 2 shows.
@@ -32,6 +34,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local Workspace = game:GetService("Workspace")
 
 local Config = require(ServerScriptService:WaitForChild("SecondFloorConfig"))
+local OfficeBuilder = require(ServerScriptService:WaitForChild("SecondFloorOfficeBuilder"))
 local PlotThemeConfig = require(ReplicatedStorage:WaitForChild("PlotThemeConfig"))
 local PurchaseEffectModule = require(ReplicatedStorage:WaitForChild("PurchaseEffectModule"))
 local PurchaseSoundModule = require(ReplicatedStorage:WaitForChild("PurchaseSoundModule"))
@@ -942,6 +945,25 @@ local function buildSecondFloor(plot)
 	cubicleFolder.Name = "Cubicles"
 	cubicleFolder.Parent = secondFloor
 	buildCubicles(plot, floorTop, storey, plotColor, cubicleFolder)
+
+	-- Senior cubicles, Team Lead meeting room and Department Manager office,
+	-- above the rest of floor 1's machine lane. Their pads copy the first
+	-- dropper's pad, like the cubicles' do.
+	local firstSource = Config.CubicleSources[1]
+	local padTemplate = findChildPath(plot, firstSource.folder, firstSource.slots[1], "BuyPad", "Head")
+	if padTemplate and padTemplate:IsA("BasePart") then
+		OfficeBuilder.Build({
+			plot = plot,
+			floorTop = floorTop,
+			storey = storey,
+			plotColor = plotColor,
+			accentTag = PlotThemeConfig.AccentPartTag,
+			padTemplate = padTemplate,
+			secondFloor = secondFloor,
+		})
+	else
+		warn("[SecondFloorService] " .. plot.Name .. " has no dropper pad to copy; office tiers not built.")
+	end
 
 	local lightsGroup = "CeilingLights" .. Config.GroupSuffix
 	local lights = collectGroupLights(shell, lightsGroup)

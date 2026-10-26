@@ -97,5 +97,67 @@ SecondFloorConfig.CubicleUpgradeCooldownSeconds = 1.5
 SecondFloorConfig.WorkerTemplateName = "Worker1" -- from ServerStorage.WorkerTemplates
 SecondFloorConfig.WorkerStandX = 3.6 -- cubicle-local X where the worker stands at the desk
 SecondFloorConfig.TypingWorkerTag = "TypingWorker" -- must match TypingWorkerClient
+SecondFloorConfig.TalkingWorkerTag = "TalkingWorker" -- meeting room; must match TypingWorkerClient
+
+---------------------------------------------------------------------------
+-- Office hierarchy (after the cubicles)
+-- The rest of floor 2's machine lane, above floor 1's conveyors, Ball Press and
+-- Orbital Reactor, is a corporate ladder. Each tier works like a first-floor
+-- machine section: a buy button, an upgrade button (levels 1-5, same
+-- multipliers and screen colors as the cubicles), and income every cycle.
+--
+-- Unlock order:
+--   Cubicles (all 10 bought) -> Senior Workers, one after another
+--   -> Team Lead meeting room -> Department Manager office.
+--
+-- Positions are plot-local X/Z of each unit's buy button, like everything else
+-- in this file. Every unit faces +X (into the lane, away from the aisle).
+---------------------------------------------------------------------------
+SecondFloorConfig.OfficeTiers = {
+	{
+		key = "Senior",
+		folder = "SeniorCubicles", -- under SecondFloor; part of the saved path
+		unitName = "Senior", -- units are Senior1, Senior2, ...
+		label = "Senior Worker",
+		price = 1, -- test price
+		upgradePrice = 1, -- test price
+		baseIncomePerMinute = 2500,
+		cycleSeconds = 3,
+		-- Two columns of four, facing the same way, with a walkway between them.
+		positions = {
+			Vector3.new(38, 0, -82), Vector3.new(38, 0, -69), Vector3.new(38, 0, -56), Vector3.new(38, 0, -43),
+			Vector3.new(57, 0, -82), Vector3.new(57, 0, -69), Vector3.new(57, 0, -56), Vector3.new(57, 0, -43),
+		},
+		workerTemplate = "ConveyorWorker",
+	},
+	{
+		key = "TeamLead",
+		folder = "MeetingRoom",
+		unitName = "TeamLead",
+		label = "Team Lead",
+		price = 1,
+		upgradePrice = 1,
+		baseIncomePerMinute = 30000,
+		cycleSeconds = 3,
+		positions = { Vector3.new(33, 0, 4) }, -- outside the meeting room door
+		-- Seat order: the team lead at the head of the table, then the team.
+		workerTemplates = { "BigConveyorWorker", "Worker1", "ConveyorWorker", "Worker1", "ConveyorWorker" },
+	},
+	{
+		key = "Manager",
+		folder = "ManagerOffice",
+		unitName = "Manager",
+		label = "Department Manager",
+		price = 1,
+		upgradePrice = 1,
+		baseIncomePerMinute = 90000,
+		cycleSeconds = 3,
+		positions = { Vector3.new(33, 0, 108) }, -- outside the office door
+		workerTemplate = "BigConveyorWorker",
+	},
+}
+
+-- Seated workers: height of a chair seat's top surface above the floor.
+SecondFloorConfig.SeatHeight = 0.9
 
 return SecondFloorConfig

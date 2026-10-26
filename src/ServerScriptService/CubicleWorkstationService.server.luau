@@ -1,18 +1,25 @@
 --[[
 	CubicleWorkstationService
-	Runs the second floor's cubicles on every plot: purchase, level upgrades, the
-	computer worker at each desk, and timed income. SecondFloorService builds the
-	cubicles; this script only adds behaviour.
+	Runs every second-floor workstation on every plot: the cubicles and the
+	office hierarchy after them (Senior Workers, Team Lead meeting room,
+	Department Manager office). Handles purchase, level upgrades, the workers at
+	each unit, and timed income. SecondFloorService / SecondFloorOfficeBuilder
+	build the units; this script only adds behaviour.
 
 	Follows the first floor's machine conventions:
-	  * Price / Activated / UpgradeLevel values inside each cubicle, so
+	  * Price / Activated / UpgradeLevel values inside each unit, so
 	    TycoonProgressService saves, restores and resets them with no changes.
 	  * Ghost -> Purchased visuals and green/red affordability on the pads.
-	  * Unlock order mirrors the dropper rows: Cubicle1 first; upgrading it to
-	    level 2 reveals Cubicles 2-5; buying all of 1-5 reveals 6-10.
 	  * Income works like the Orbital Reactor: BaseIncomePerMinute paid out every
-	    CycleSeconds to the plot owner, scaled by level.
-	Everything is server-side; the client only plays the cosmetic typing motion.
+	    CycleSeconds to the plot owner, scaled by level (CubicleLevels).
+
+	Unlock order (a corporate ladder):
+	  * Cubicles mirror the dropper rows: Cubicle1 first; upgrading it to level 2
+	    reveals Cubicles 2-5; buying all of 1-5 reveals 6-10.
+	  * Each office tier (Config.OfficeTiers, in order) opens once every unit of
+	    the tier before it is bought. Inside a tier, units open one at a time.
+
+	Everything is server-side; the client only plays cosmetic worker motion.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -33,7 +40,28 @@ local COLOR_RED = Color3.new(0.8, 0.1, 0.1)
 local UPDATE_INTERVAL_SECONDS = 0.5
 local MAX_LEVEL = #Config.CubicleLevels
 
-local warnedMissingTemplate = false
+-- Tier list, in unlock order. The cubicles come first; the office tiers follow
+-- in the order SecondFloorConfig lists them.
+local TIERS = {
+	{
+		key = "Cubicles",
+		folder = "Cubicles",
+		label = "Computer Worker",
+		upgradePrice = Config.CubicleUpgradePrice,
+		isCubicles = true,
+	},
+}
+for _, officeTier in ipairs(Config.OfficeTiers) do
+	table.insert(TIERS, {
+		key = officeTier.key,
+		folder = officeTier.folder,
+		label = officeTier.label,
+		upgradePrice = officeTier.upgradePrice,
+		isCubicles = false,
+	})
+end
+
+local warnedMissingTemplates = {}
 
 ---------------------------------------------------------------------------
 -- Helpers
@@ -105,37 +133,55 @@ local function updatePad(pad, visible, price, ownerCash, nameText)
 end
 
 ---------------------------------------------------------------------------
--- Cubicle records
+-- Unit records
 ---------------------------------------------------------------------------
 
-local function makeRecord(cubicle)
-	local geometry = cubicle:FindFirstChild("Geometry")
+local function makeRecord(unit, tier, tierIndex)
+	local geometry = unit:FindFirstChild("Geometry")
 	local parts = {}
+	local surfaceGuis = {}
 	if geometry then
 		for _, descendant in ipairs(geometry:GetDescendants()) do
 			if descendant:IsA("BasePart") then
 				table.insert(parts, descendant)
+			elseif descendant:IsA("SurfaceGui") then
+				table.insert(surfaceGuis, descendant)
 			end
 		end
 	end
 	local screen = geometry and geometry:FindFirstChild("Screen")
 
+	local spots = {}
+	local spotFolder = unit:FindFirstChild("WorkerSpots")
+	if spotFolder then
+		for _, spot in ipairs(spotFolder:GetChildren()) do
+			if spot:IsA("BasePart") then
+				table.insert(spots, spot)
+			end
+		end
+	end
+
 	return {
-		model = cubicle,
-		index = cubicle:GetAttribute("Order") or 0,
-		activated = cubicle:FindFirstChild("Activated"),
-		level = cubicle:FindFirstChild("UpgradeLevel"),
-		price = cubicle:FindFirstChild("Price"),
-		baseIncome = cubicle:FindFirstChild("BaseIncomePerMinute"),
-		cycleSeconds = cubicle:FindFirstChild("CycleSeconds"),
-		buyPad = cubicle:FindFirstChild("BuyPad"),
-		upgradePad = cubicle:FindFirstChild("UpgradePad"),
+		model = unit,
+		tier = tier,
+		tierIndex = tierIndex,
+		index = unit:GetAttribute("Order") or 0,
+		activated = unit:FindFirstChild("Activated"),
+		level = unit:FindFirstChild("UpgradeLevel"),
+		price = unit:FindFirstChild("Price"),
+		baseIncome = unit:FindFirstChild("BaseIncomePerMinute"),
+		cycleSeconds = unit:FindFirstChild("CycleSeconds"),
+		buyPad = unit:FindFirstChild("BuyPad"),
+		upgradePad = unit:FindFirstChild("UpgradePad"),
 		screen = screen,
 		incomeLabel = screen and screen:FindFirstChild("IncomeLabel"),
 		parts = parts,
+		surfaceGuis = surfaceGuis,
+		spots = spots,
 		state = nil,
 		geometryMode = nil,
-		worker = nil,
+		workers = {},
+		workersSpawned = false,
 		processing = false,
 		upgradeCooldownUntil = 0,
 		incomeTimer = 0,
@@ -165,12 +211,16 @@ local function setGeometry(record, mode)
 			part.Transparency = part:GetAttribute("SolidTransparency") or 0
 			part.CanCollide = part:GetAttribute("SolidCanCollide") ~= false
 		elseif mode == "Ghost" then
-			part.Transparency = Config.GhostTransparency
+			part.Transparency = math.max(part:GetAttribute("SolidTransparency") or 0, Config.GhostTransparency)
 			part.CanCollide = false
 		else
 			part.Transparency = 1
 			part.CanCollide = false
 		end
+	end
+	-- Signs, whiteboard and TV text only show once the unit is bought.
+	for _, gui in ipairs(record.surfaceGuis) do
+		gui.Enabled = mode == "Solid"
 	end
 end
 
@@ -195,28 +245,22 @@ local function updateLabels(record, purchased)
 end
 
 ---------------------------------------------------------------------------
--- Computer workers
+-- Workers
 ---------------------------------------------------------------------------
 
--- Clones a worker rig, strips its behaviour scripts, and stands it at the desk
--- facing the monitor. The root is anchored; the typing motion is client-side.
-local function spawnWorker(record)
-	local template = workerTemplates:FindFirstChild(Config.WorkerTemplateName)
+-- Clones a worker template with its behaviour scripts removed. The root stays
+-- anchored; motion is cosmetic and client-side.
+local function cloneWorker(templateName)
+	local template = workerTemplates:FindFirstChild(templateName)
 	if not template then
-		if not warnedMissingTemplate then
-			warnedMissingTemplate = true
-			warn("[CubicleWorkstationService] Missing worker template: " .. Config.WorkerTemplateName)
+		if not warnedMissingTemplates[templateName] then
+			warnedMissingTemplates[templateName] = true
+			warn("[CubicleWorkstationService] Missing worker template: " .. tostring(templateName))
 		end
-		return
-	end
-
-	local frame = record.model:GetAttribute("CubicleFrame")
-	if typeof(frame) ~= "CFrame" then
-		return
+		return nil
 	end
 
 	local worker = template:Clone()
-	worker.Name = "ComputerWorker"
 	for _, descendant in ipairs(worker:GetDescendants()) do
 		if descendant:IsA("BaseScript") then
 			descendant:Destroy()
@@ -232,33 +276,120 @@ local function spawnWorker(record)
 	local root = worker:FindFirstChild("HumanoidRootPart")
 	if not (humanoid and root and root:IsA("BasePart")) then
 		worker:Destroy()
-		return
+		return nil
 	end
 	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
 	root.Anchored = true
 	root.Transparency = 1
-
-	-- Root height that puts the feet on the floor, for either rig type.
-	local rootHeight = humanoid.RigType == Enum.HumanoidRigType.R15
-		and (humanoid.HipHeight + root.Size.Y / 2)
-		or 3
-	local standPosition = Vector3.new(Config.WorkerStandX, rootHeight, 0)
-	local target = frame * CFrame.lookAt(standPosition, standPosition + Vector3.xAxis)
-
-	-- Move the whole rig so the root lands on target, whatever the model's pivot.
-	local rootOffset = worker:GetPivot():ToObjectSpace(root.CFrame)
-	worker:PivotTo(target * rootOffset:Inverse())
-
-	CollectionService:AddTag(worker, Config.TypingWorkerTag)
-	worker.Parent = record.model
-	record.worker = worker
+	return worker, humanoid, root
 end
 
-local function despawnWorker(record)
-	if record.worker then
-		record.worker:Destroy()
-		record.worker = nil
+-- Root height above the floor for a standing rig, either rig type.
+local function getStandingRootHeight(humanoid, root)
+	if humanoid.RigType == Enum.HumanoidRigType.R15 then
+		return humanoid.HipHeight + root.Size.Y / 2
 	end
+	return 3
+end
+
+-- Bends an R15 rig into a seated pose (thighs forward, shins down) and
+-- returns the root height that rests the thighs on a seat of `seatHeight`.
+-- Joint C0s replicate to clients. Returns nil for rigs it can't pose (R6),
+-- so those workers stand instead.
+local function poseSeated(worker, humanoid, seatHeight)
+	if humanoid.RigType ~= Enum.HumanoidRigType.R15 then
+		return nil
+	end
+	local rootJoint = worker:FindFirstChild("Root", true)
+	local leftHip = worker:FindFirstChild("LeftHip", true)
+	local rightHip = worker:FindFirstChild("RightHip", true)
+	local leftKnee = worker:FindFirstChild("LeftKnee", true)
+	local rightKnee = worker:FindFirstChild("RightKnee", true)
+	local upperLeg = worker:FindFirstChild("LeftUpperLeg")
+	for _, joint in ipairs({ rootJoint, leftHip, rightHip, leftKnee, rightKnee }) do
+		if not (joint and joint:IsA("Motor6D")) then
+			return nil
+		end
+	end
+	if not (upperLeg and upperLeg:IsA("BasePart")) then
+		return nil
+	end
+
+	local bend = math.rad(90)
+	leftHip.C0 *= CFrame.Angles(bend, 0, 0)
+	rightHip.C0 *= CFrame.Angles(bend, 0, 0)
+	leftKnee.C0 *= CFrame.Angles(-bend, 0, 0)
+	rightKnee.C0 *= CFrame.Angles(-bend, 0, 0)
+
+	-- Hip joint height relative to the root, through the root joint.
+	local hipOffset = rootJoint.C0.Y - rootJoint.C1.Y + leftHip.C0.Y
+	-- A horizontal thigh's underside sits half its thickness below the hip.
+	return seatHeight - hipOffset + upperLeg.Size.Z / 2
+end
+
+-- Places a worker so its root lands on `rootCFrame`, whatever the model pivot.
+local function placeWorker(worker, root, rootCFrame)
+	local rootOffset = worker:GetPivot():ToObjectSpace(root.CFrame)
+	worker:PivotTo(rootCFrame * rootOffset:Inverse())
+end
+
+-- Office units: one worker per WorkerSpot marker.
+local function spawnSpotWorker(record, spot)
+	local worker, humanoid, root = cloneWorker(spot:GetAttribute("Template") or Config.WorkerTemplateName)
+	if not worker then
+		return
+	end
+	worker.Name = "OfficeWorker"
+
+	local rootHeight
+	if spot:GetAttribute("Pose") == "Sit" then
+		rootHeight = poseSeated(worker, humanoid, spot:GetAttribute("SeatHeight") or Config.SeatHeight)
+	end
+	rootHeight = rootHeight or getStandingRootHeight(humanoid, root)
+
+	-- The marker's look vector is the facing direction; its Y is the floor.
+	placeWorker(worker, root, spot.CFrame * CFrame.new(0, rootHeight, 0))
+	CollectionService:AddTag(worker, spot:GetAttribute("Tag") or Config.TypingWorkerTag)
+	worker.Parent = record.model
+	table.insert(record.workers, worker)
+end
+
+-- Cubicles: one standing worker at the desk (their original layout).
+local function spawnCubicleWorker(record)
+	local frame = record.model:GetAttribute("CubicleFrame")
+	if typeof(frame) ~= "CFrame" then
+		return
+	end
+	local worker, humanoid, root = cloneWorker(Config.WorkerTemplateName)
+	if not worker then
+		return
+	end
+	worker.Name = "ComputerWorker"
+
+	local standPosition = Vector3.new(Config.WorkerStandX, getStandingRootHeight(humanoid, root), 0)
+	placeWorker(worker, root, frame * CFrame.lookAt(standPosition, standPosition + Vector3.xAxis))
+	CollectionService:AddTag(worker, Config.TypingWorkerTag)
+	worker.Parent = record.model
+	table.insert(record.workers, worker)
+end
+
+local function spawnWorkers(record)
+	record.workersSpawned = true
+	if #record.spots > 0 then
+		for _, spot in ipairs(record.spots) do
+			spawnSpotWorker(record, spot)
+		end
+	else
+		spawnCubicleWorker(record)
+	end
+end
+
+local function despawnWorkers(record)
+	for _, worker in ipairs(record.workers) do
+		worker:Destroy()
+	end
+	table.clear(record.workers)
+	record.workersSpawned = false
 end
 
 ---------------------------------------------------------------------------
@@ -268,43 +399,90 @@ end
 local function setupPlot(plot)
 	local secondFloor = plot:FindFirstChild("SecondFloor")
 	local floorActivated = secondFloor and secondFloor:FindFirstChild("Activated")
-	local cubicleFolder = secondFloor and secondFloor:FindFirstChild("Cubicles")
-	if not (floorActivated and cubicleFolder) then
+	if not (floorActivated and secondFloor:FindFirstChild("Cubicles")) then
 		warn("[CubicleWorkstationService] " .. plot.Name .. " has no second-floor cubicles.")
 		return
 	end
 
+	-- recordsByTier[i] holds tier i's units, sorted by Order.
 	local records = {}
-	for _, cubicle in ipairs(cubicleFolder:GetChildren()) do
-		local record = makeRecord(cubicle)
-		if isRecordComplete(record) then
-			table.insert(records, record)
-		else
-			warn("[CubicleWorkstationService] Incomplete cubicle: " .. cubicle:GetFullName())
+	local recordsByTier = {}
+	for tierIndex, tier in ipairs(TIERS) do
+		local tierRecords = {}
+		local folder = secondFloor:FindFirstChild(tier.folder)
+		if folder then
+			for _, unit in ipairs(folder:GetChildren()) do
+				if unit:IsA("Model") then
+					local record = makeRecord(unit, tier, tierIndex)
+					if isRecordComplete(record) then
+						table.insert(tierRecords, record)
+						table.insert(records, record)
+					else
+						warn("[CubicleWorkstationService] Incomplete unit: " .. unit:GetFullName())
+					end
+				end
+			end
+		elseif not tier.isCubicles then
+			warn("[CubicleWorkstationService] " .. plot.Name .. " has no " .. tier.folder .. ".")
 		end
+		table.sort(tierRecords, function(a, b)
+			return a.index < b.index
+		end)
+		recordsByTier[tierIndex] = tierRecords
 	end
-	table.sort(records, function(a, b)
-		return a.index < b.index
-	end)
 
 	local rowSize = Config.CubicleRowSize
 
-	-- Mirrors the dropper rows: 1 first; 1 at level 2 opens the rest of row 1;
-	-- buying all of row 1 opens row 2.
-	local function isUnlocked(record)
-		if record.index <= 1 then
-			return true
+	local function isTierComplete(tierIndex)
+		local tierRecords = recordsByTier[tierIndex]
+		if not tierRecords or #tierRecords == 0 then
+			return false
 		end
-		local first = records[1]
-		if record.index <= rowSize then
-			return first ~= nil and first.activated.Value and first.level.Value >= 2
-		end
-		for i = 1, math.min(rowSize, #records) do
-			if not records[i].activated.Value then
+		for _, record in ipairs(tierRecords) do
+			if not record.activated.Value then
 				return false
 			end
 		end
 		return true
+	end
+
+	-- Cubicles mirror the dropper rows: 1 first; 1 at level 2 opens the rest of
+	-- row 1; buying all of row 1 opens row 2.
+	local function isCubicleUnlocked(record)
+		local cubicles = recordsByTier[record.tierIndex]
+		if record.index <= 1 then
+			return true
+		end
+		local first = cubicles[1]
+		if record.index <= rowSize then
+			return first ~= nil and first.activated.Value and first.level.Value >= 2
+		end
+		for i = 1, math.min(rowSize, #cubicles) do
+			if not cubicles[i].activated.Value then
+				return false
+			end
+		end
+		return true
+	end
+
+	-- Office tiers: the whole previous tier bought, then one unit at a time.
+	local function isOfficeUnlocked(record)
+		if not isTierComplete(record.tierIndex - 1) then
+			return false
+		end
+		local tierRecords = recordsByTier[record.tierIndex]
+		local position = table.find(tierRecords, record)
+		if not position or position == 1 then
+			return true
+		end
+		return tierRecords[position - 1].activated.Value
+	end
+
+	local function isUnlocked(record)
+		if record.tier.isCubicles then
+			return isCubicleUnlocked(record)
+		end
+		return isOfficeUnlocked(record)
 	end
 
 	local function getState(record)
@@ -332,21 +510,21 @@ local function setupPlot(plot)
 				setGeometry(record, "Hidden")
 			end
 			if state ~= "Purchased" then
-				despawnWorker(record)
+				despawnWorkers(record)
 				record.incomeTimer = 0
 			end
 		end
-		if state == "Purchased" and not (record.worker and record.worker.Parent) then
-			spawnWorker(record)
+		if state == "Purchased" and not record.workersSpawned then
+			spawnWorkers(record)
 		end
 
 		local cash = getCash(getOwnerPlayer(plot))
 		local level = getLevel(record)
-		updatePad(record.buyPad, state == "Available", record.price.Value, cash, "Computer Worker")
+		updatePad(record.buyPad, state == "Available", record.price.Value, cash, record.tier.label)
 		local canUpgrade = state == "Purchased"
 			and level < MAX_LEVEL
 			and os.clock() >= record.upgradeCooldownUntil
-		updatePad(record.upgradePad, canUpgrade, Config.CubicleUpgradePrice, cash, "Upgrade to Lvl " .. tostring(level + 1))
+		updatePad(record.upgradePad, canUpgrade, record.tier.upgradePrice, cash, "Upgrade to Lvl " .. tostring(level + 1))
 		updateLabels(record, state == "Purchased")
 	end
 
@@ -390,8 +568,8 @@ local function setupPlot(plot)
 		applyRecord(record, true)
 
 		PurchaseSoundModule.PlayPurchaseForTarget(player, record.buyPad)
-		if record.worker then
-			PurchaseSoundModule.PlayWorkerSpawn(player, record.worker)
+		if record.workers[1] then
+			PurchaseSoundModule.PlayWorkerSpawn(player, record.workers[1])
 		end
 		if #record.parts > 0 then
 			PurchaseEffectModule.PlayAcrossParts(record.parts)
@@ -418,7 +596,7 @@ local function setupPlot(plot)
 			return
 		end
 
-		local price = Config.CubicleUpgradePrice
+		local price = record.tier.upgradePrice
 		local cash = getCash(player)
 		if price > 0 and (not cash or cash.Value < price) then
 			return
