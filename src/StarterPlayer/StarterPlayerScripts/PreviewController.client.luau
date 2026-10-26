@@ -6,6 +6,11 @@
 -- value means the pad is retired (Home Centre locked, or everything bought),
 -- so the preview hides.
 --
+-- Covers both floors: floor 1's pad at <plot>/CentreSlots/Centre02_Home and
+-- floor 2's at <plot>/SecondFloor/CentreSlots/Centre02_Home (built by
+-- SecondFloorService). Floor-2 structure groups carry a floor suffix
+-- ("Walls_F2"), which is stripped so both floors share one set of icons.
+--
 -- Purely cosmetic. No purchase logic lives on the client.
 
 local Players = game:GetService("Players")
@@ -46,6 +51,26 @@ local STRUCTURE_STYLES = {
 }
 
 local previews = {}   -- [pad] = { anchor, frame, emojiLabel, nameLabel, group, time }
+
+-- Where each floor's Home Centre structure pad lives, relative to the plot.
+local PAD_PATHS = {
+	{ "CentreSlots", "Centre02_Home", "StructureBuyPad" },                -- floor 1
+	{ "SecondFloor", "CentreSlots", "Centre02_Home", "StructureBuyPad" }, -- floor 2
+}
+
+local function findChildPath(root, path)
+	local current = root
+	for _, name in ipairs(path) do
+		current = current and current:FindFirstChild(name)
+	end
+	return current
+end
+
+-- "Walls_F2" -> "Walls". Matches SecondFloorConfig.GroupSuffix and leaves
+-- floor-1 names untouched.
+local function getStyleKey(groupName)
+	return (string.gsub(groupName, "_F%d+$", ""))
+end
 
 --------------------------------------------------------------------
 -- Construction
@@ -128,7 +153,7 @@ local function applyStyle(preview, groupName)
 	if preview.group == groupName then return end
 	preview.group = groupName
 
-	local style = STRUCTURE_STYLES[groupName]
+	local style = STRUCTURE_STYLES[getStyleKey(groupName)]
 	if not style then return end
 
 	preview.frame.BackgroundColor3 = style.color
@@ -155,7 +180,7 @@ end
 --------------------------------------------------------------------
 -- Update
 --------------------------------------------------------------------
-local function updatePad(pad, dt)
+local function updatePad(plot, pad, dt)
 	local preview = previews[pad]
 	if not preview then
 		preview = buildPreview(pad)
@@ -164,15 +189,11 @@ local function updatePad(pad, dt)
 
 	local groupName = pad:GetAttribute("CurrentStructure")
 	local mode = pad:GetAttribute("StructurePreviewMode")
-	local homeCentre = pad.Parent
-	local centreSlots = homeCentre and homeCentre.Parent
-	local plot = centreSlots and centreSlots.Parent
 	local isAvailablePreview = mode == "CentreAvailable"
-	local isOwnedByLocalPlayer = plot
-		and tonumber(plot:GetAttribute("Owner")) == player.UserId
-	local shouldShow = groupName ~= nil
+	local isOwnedByLocalPlayer = tonumber(plot:GetAttribute("Owner")) == player.UserId
+	local shouldShow = type(groupName) == "string"
 		and groupName ~= ""
-		and STRUCTURE_STYLES[groupName] ~= nil
+		and STRUCTURE_STYLES[getStyleKey(groupName)] ~= nil
 		and (not isAvailablePreview or isOwnedByLocalPlayer)
 
 	if preview.bill.Enabled ~= shouldShow then
@@ -208,11 +229,11 @@ RunService.RenderStepped:Connect(function(dt)
 
 	for _, plot in ipairs(ws:GetChildren()) do
 		if plot.Name:match("^P%d+$") then
-			local centreSlots = plot:FindFirstChild("CentreSlots")
-			local homeCentre = centreSlots and centreSlots:FindFirstChild("Centre02_Home")
-			local pad = homeCentre and homeCentre:FindFirstChild("StructureBuyPad")
-			if pad then
-				updatePad(pad, dt)
+			for _, path in ipairs(PAD_PATHS) do
+				local pad = findChildPath(plot, path)
+				if pad and pad:IsA("BasePart") then
+					updatePad(plot, pad, dt)
+				end
 			end
 		end
 	end
