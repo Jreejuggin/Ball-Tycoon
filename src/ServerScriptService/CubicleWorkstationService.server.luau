@@ -19,6 +19,14 @@
 	  * Each office tier (Config.OfficeTiers, in order) opens once every unit of
 	    the tier before it is bought. Inside a tier, units open one at a time.
 
+	Supervisors (floor 2's Manager Center, see ManagerCenterService) make a
+	section work faster: its income is multiplied by
+	SupervisorBonus.GetMultiplier for that section, and its workers carry a
+	WorkSpeed attribute so the client types faster. Sections are cubicle row 1
+	(Cubicles 1-5), cubicle row 2 (6-10), and each office tier.
+
+	Floor 2 workers wear office clothes (OfficeAttire, SecondFloorConfig.EmployeeOutfits).
+
 	Everything is server-side; the client only plays cosmetic worker motion.
 ]]
 
@@ -30,6 +38,8 @@ local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
 
 local Config = require(ServerScriptService:WaitForChild("SecondFloorConfig"))
+local OfficeAttire = require(ServerScriptService:WaitForChild("OfficeAttire"))
+local SupervisorBonus = require(ServerScriptService:WaitForChild("SupervisorBonus"))
 local PurchaseEffectModule = require(ReplicatedStorage:WaitForChild("PurchaseEffectModule"))
 local PurchaseSoundModule = require(ReplicatedStorage:WaitForChild("PurchaseSoundModule"))
 
@@ -178,6 +188,8 @@ local function makeRecord(unit, tier, tierIndex)
 		parts = parts,
 		surfaceGuis = surfaceGuis,
 		spots = spots,
+		section = nil, -- set by setupPlot (which supervisor oversees this unit)
+		bonus = 1, -- supervisor multiplier, refreshed every update
 		state = nil,
 		geometryMode = nil,
 		workers = {},
@@ -198,7 +210,7 @@ local function getLevel(record)
 end
 
 local function getIncomePerMinute(record)
-	return record.baseIncome.Value * Config.CubicleLevels[getLevel(record)].multiplier
+	return record.baseIncome.Value * Config.CubicleLevels[getLevel(record)].multiplier * record.bonus
 end
 
 local function setGeometry(record, mode)
@@ -250,7 +262,7 @@ end
 
 -- Clones a worker template with its behaviour scripts removed. The root stays
 -- anchored; motion is cosmetic and client-side.
-local function cloneWorker(templateName)
+local function cloneWorker(templateName, outfit)
 	local template = workerTemplates:FindFirstChild(templateName)
 	if not template then
 		if not warnedMissingTemplates[templateName] then
@@ -281,6 +293,9 @@ local function cloneWorker(templateName)
 	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
 	root.Anchored = true
 	root.Transparency = 1
+	if outfit and OfficeAttire.HasStyle(outfit) then
+		OfficeAttire.Dress(worker, outfit)
+	end
 	return worker, humanoid, root
 end
 
@@ -335,7 +350,10 @@ end
 
 -- Office units: one worker per WorkerSpot marker.
 local function spawnSpotWorker(record, spot)
-	local worker, humanoid, root = cloneWorker(spot:GetAttribute("Template") or Config.WorkerTemplateName)
+	local worker, humanoid, root = cloneWorker(
+		spot:GetAttribute("Template") or Config.WorkerTemplateName,
+		Config.EmployeeOutfits[record.tier.key]
+	)
 	if not worker then
 		return
 	end
@@ -360,7 +378,7 @@ local function spawnCubicleWorker(record)
 	if typeof(frame) ~= "CFrame" then
 		return
 	end
-	local worker, humanoid, root = cloneWorker(Config.WorkerTemplateName)
+	local worker, humanoid, root = cloneWorker(Config.WorkerTemplateName, Config.EmployeeOutfits[record.tier.key])
 	if not worker then
 		return
 	end
@@ -381,6 +399,22 @@ local function spawnWorkers(record)
 		end
 	else
 		spawnCubicleWorker(record)
+	end
+	for _, worker in ipairs(record.workers) do
+		worker:SetAttribute("WorkSpeed", record.bonus)
+	end
+end
+
+-- Refreshes the section's supervisor bonus. Workers get it as WorkSpeed, so
+-- the client speeds up their typing the moment a supervisor is hired.
+local function refreshBonus(record, plot)
+	local bonus = SupervisorBonus.GetMultiplier(plot, record.section)
+	if bonus == record.bonus then
+		return
+	end
+	record.bonus = bonus
+	for _, worker in ipairs(record.workers) do
+		worker:SetAttribute("WorkSpeed", bonus)
 	end
 end
 
@@ -428,6 +462,14 @@ local function setupPlot(plot)
 		table.sort(tierRecords, function(a, b)
 			return a.index < b.index
 		end)
+		-- Which supervisor (SecondFloorConfig.SupervisorStages.section) oversees each unit.
+		for _, record in ipairs(tierRecords) do
+			if tier.isCubicles then
+				record.section = record.index <= Config.CubicleRowSize and "CubiclesRow1" or "CubiclesRow2"
+			else
+				record.section = tier.key
+			end
+		end
 		recordsByTier[tierIndex] = tierRecords
 	end
 
@@ -499,6 +541,7 @@ local function setupPlot(plot)
 	end
 
 	local function applyRecord(record, force)
+		refreshBonus(record, plot)
 		local state = getState(record)
 		if force or state ~= record.state then
 			record.state = state
