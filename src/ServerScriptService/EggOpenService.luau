@@ -1,4 +1,4 @@
--- P1 prototype: all prices, rolls, ownership and inventory changes run here on the server.
+-- Plot-owned nests across P1-P10. Prices, rolls, ownership and inventory changes run on the server.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
@@ -15,10 +15,12 @@ local busy = {}
 local policy = setmetatable({}, { __mode = "k" })
 local lastPurchase = setmetatable({}, { __mode = "k" })
 local initialized = false
+local plotsByName = {}
 
 local function findPlot(player)
-	local plot = workspace:FindFirstChild(player:GetAttribute("AssignedPlotName") or "")
-	if plot and plot.Name == "P1" and plot:GetAttribute("Owner") == player.UserId then return plot end
+	local name = player:GetAttribute("AssignedPlotName")
+	local plot = type(name) == "string" and plotsByName[name]
+	if plot and plot.Parent == workspace and plot:GetAttribute("Owner") == player.UserId then return plot end
 	return nil
 end
 
@@ -29,6 +31,17 @@ local function findSpot(plot)
 	local base = residence and residence:FindFirstChild("Base")
 	local spot = base and base:FindFirstChild("PetSpot")
 	return spot and spot:IsA("Attachment") and spot or nil
+end
+
+local function clearPlot(plot)
+	-- Owner changes and centre resets invalidate pending visual callbacks for this plot.
+	busy[plot] = nil
+	local model = liveEggs[plot]
+	liveEggs[plot] = nil
+	if model then model:Destroy() end
+	local spot = findSpot(plot)
+	local anchor = spot and spot.Parent:FindFirstChild("EggShopAnchor")
+	if anchor then anchor:Destroy() end
 end
 
 local function isNear(player, spot)
@@ -108,6 +121,8 @@ local function openEgg(player, plot, spot, model, carrier, record, prompt, holds
 	-- Keep the next egg from overlapping this reveal. This never gates persistence.
 	task.delay(breakDelay + timing.SplitTime * 1.4 + timing.RevealPop * 1.4
 		+ timing.Hold + Config.Rarity[rarity].ExtraHold + timing.FadeOut, function()
+		-- An old hatch must not clear a new owner\'s or a newer hatch\'s lock.
+		if busy[plot] ~= model then return end
 		busy[plot] = nil
 		if findPlot(player) == plot then Service.Refresh(player) end
 	end)
@@ -192,23 +207,26 @@ end
 function Service.Init()
 	if initialized then return end
 	initialized = true
-	local plot = workspace:FindFirstChild("P1")
-	assert(findSpot(plot), "P1 PetSpot is missing")
-	plot.CentreSlots.Centre05_Pet.Activated.Changed:Connect(function()
-		local owner = plot:GetAttribute("Owner")
-		local player = owner and Players:GetPlayerByUserId(owner)
-		if player then Service.Refresh(player) end
-	end)
-	plot:GetAttributeChangedSignal("Owner"):Connect(function()
-		if liveEggs[plot] then liveEggs[plot]:Destroy(); liveEggs[plot] = nil end
-		busy[plot] = nil
-		local spot = findSpot(plot)
-		local anchor = spot and spot.Parent:FindFirstChild("EggShopAnchor")
-		if anchor then anchor:Destroy() end
-		local owner = plot:GetAttribute("Owner")
-		local player = owner and Players:GetPlayerByUserId(owner)
-		if player then Service.Refresh(player); Service.SendState(player) end
-	end)
+	for index = 1, 10 do
+		local plot = workspace:FindFirstChild("P" .. index)
+		assert(plot and plot:IsA("Model"), "Missing plot P" .. index)
+		assert(findSpot(plot), plot.Name .. " PetSpot is missing")
+		plotsByName[plot.Name] = plot
+		local activated = plot.CentreSlots.Centre05_Pet:FindFirstChild("Activated")
+		assert(activated and activated:IsA("BoolValue"), plot.Name .. " pet centre activation is missing")
+		activated.Changed:Connect(function()
+			if not activated.Value then clearPlot(plot); return end
+			local owner = plot:GetAttribute("Owner")
+			local player = owner and Players:GetPlayerByUserId(owner)
+			if player then Service.Refresh(player) end
+		end)
+		plot:GetAttributeChangedSignal("Owner"):Connect(function()
+			clearPlot(plot)
+			local owner = plot:GetAttribute("Owner")
+			local player = owner and Players:GetPlayerByUserId(owner)
+			if player then Service.Refresh(player); Service.SendState(player) end
+		end)
+	end
 	local function connectPlayer(player)
 		-- Policies are fetched once, outside the non-yielding purchase transaction.
 		task.spawn(function()
@@ -218,7 +236,10 @@ function Service.Init()
 		player:GetAttributeChangedSignal("AssignedPlotName"):Connect(function()
 			Service.Refresh(player)
 		end)
-		if player:GetAttribute("DataLoaded") then Service.Refresh(player) end
+		player:GetAttributeChangedSignal("DataLoaded"):Connect(function()
+			if player:GetAttribute("DataLoaded") then Service.Refresh(player); Service.SendState(player) end
+		end)
+		if player:GetAttribute("DataLoaded") then Service.Refresh(player); Service.SendState(player) end
 	end
 	Players.PlayerAdded:Connect(connectPlayer)
 	for _, player in ipairs(Players:GetPlayers()) do connectPlayer(player) end
@@ -229,7 +250,7 @@ function Service.Init()
 		lastPurchase[player] = now
 		local plot = findPlot(player)
 		local spot = findSpot(plot)
-		if not plot or busy[plot] or not isNear(player, spot) then Service.SendState(player, "Walk to your P1 nest first"); return end
+		if not plot or busy[plot] or not isNear(player, spot) then Service.SendState(player, "Walk to your own nest first"); return end
 		local info = policy[player]
 		if not info or info.ArePaidRandomItemsRestricted then
 			Service.SendState(player, "Random egg purchases are unavailable for this account")

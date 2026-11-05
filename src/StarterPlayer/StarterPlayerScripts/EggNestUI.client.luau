@@ -1,4 +1,4 @@
--- Simple P1 prototype shop and pet list. All purchases are rechecked on the server.
+-- Plot-owned nest shop and pet list. All purchases are rechecked on the server.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local player = Players.LocalPlayer
@@ -40,7 +40,7 @@ local close = create("TextButton", panel, {
 	Size = UDim2.fromOffset(44, 44), TextColor3 = Color3.new(1, 1, 1), TextSize = 22,
 })
 local status = create("TextLabel", panel, {
-	Name = "Status", Text = "Walk to your P1 nest to buy an egg.", BackgroundTransparency = 1,
+	Name = "Status", Text = "Walk to your nest to buy an egg.", BackgroundTransparency = 1,
 	Position = UDim2.fromOffset(20, 50), Size = UDim2.new(1, -40, 0, 44), TextWrapped = true,
 	TextColor3 = Color3.fromRGB(216, 209, 237), Font = Enum.Font.Gotham, TextSize = 14,
 })
@@ -143,7 +143,7 @@ local function update(newState, message)
 	state = newState
 	if not state then return end
 	renderEquipment()
-	status.Text = message or (state.NestEgg and "An egg is waiting on your nest. Hold E to open it." or "Walk to your P1 nest to buy an egg.")
+	status.Text = message or (state.NestEgg and "An egg is waiting on your nest. Hold E to open it." or "Walk to your nest to buy an egg.")
 	for _, button in pairs(rows) do button.AutoButtonColor = not state.NestEgg end
 end
 
