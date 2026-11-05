@@ -39,7 +39,8 @@ local function publishEquipped(player, state)
 end
 
 function Service.Resolve(player, savedData)
-	local data = type(savedData) == "table" and savedData.PetInventory
+	-- A successful first load has no saved record; keep the pet section nil.
+	local data = if type(savedData) == "table" then savedData.PetInventory else nil
 	local state = { SchemaVersion = 1, Pets = {}, NestEgg = nil, Equipped = {} }
 	if data ~= nil then
 		assert(type(data) == "table" and data.SchemaVersion == 1, "Unsupported pet save; refusing to replace it")
