@@ -8,6 +8,10 @@
 	  * TalkingWorker (meeting room): arms rest on the table; now and then one
 	    hand lifts to gesture, and the head turns around the table as if
 	    following the discussion.
+	  * SupervisorWorker (Manager Center supervisors): holds up a clipboard and
+	    slowly looks over the team, with an occasional nod.
+	Workers with a WorkSpeed attribute (set by the server when their section's
+	supervisor is hired) type and gesture that many times faster.
 	Workers far from the camera are skipped. Seated poses (hips/knees) are set on
 	the server and are left alone here; only shoulders and neck move.
 
@@ -24,6 +28,7 @@ local Workspace = game:GetService("Workspace")
 
 local TYPING_TAG = "TypingWorker" -- must match SecondFloorConfig.TypingWorkerTag
 local TALKING_TAG = "TalkingWorker" -- must match SecondFloorConfig.TalkingWorkerTag
+local SUPERVISOR_TAG = "SupervisorWorker" -- must match ManagerCenterService
 local MAX_ANIMATE_DISTANCE = 120
 
 -- Typing
@@ -38,6 +43,12 @@ local GESTURE_SPEED = 0.7 -- how often a gesture comes round
 local HEAD_TURN_DEGREES = 25 -- looking around the table
 local HEAD_TURN_SPEED = 0.35
 
+-- Supervising
+local CLIPBOARD_ARM_DEGREES = 50 -- left arm holding the clipboard up
+local SCAN_DEGREES = 35 -- looking along the row
+local SCAN_SPEED = 0.25
+local NOD_DEGREES = 8
+
 -- Joint names and rotations, per rig type.
 local RIGS = {
 	R15 = {
@@ -47,8 +58,8 @@ local RIGS = {
 		arm = function(baseC0, angle, _isLeft)
 			return baseC0 * CFrame.Angles(angle, 0, 0)
 		end,
-		head = function(baseC0, yaw)
-			return baseC0 * CFrame.Angles(0, yaw, 0)
+		head = function(baseC0, yaw, pitch)
+			return baseC0 * CFrame.Angles(pitch or 0, yaw, 0)
 		end,
 	},
 	R6 = {
@@ -58,8 +69,8 @@ local RIGS = {
 		arm = function(baseC0, angle, isLeft)
 			return baseC0 * CFrame.Angles(0, 0, isLeft and -angle or angle)
 		end,
-		head = function(baseC0, yaw)
-			return baseC0 * CFrame.Angles(0, 0, yaw)
+		head = function(baseC0, yaw, pitch)
+			return baseC0 * CFrame.Angles(pitch or 0, 0, yaw)
 		end,
 	},
 }
@@ -106,7 +117,7 @@ local function untrack(model)
 	workers[model] = nil
 end
 
-for _, entry in ipairs({ { TYPING_TAG, "Typing" }, { TALKING_TAG, "Talking" } }) do
+for _, entry in ipairs({ { TYPING_TAG, "Typing" }, { TALKING_TAG, "Talking" }, { SUPERVISOR_TAG, "Supervisor" } }) do
 	local tag, kind = entry[1], entry[2]
 	for _, model in ipairs(CollectionService:GetTagged(tag)) do
 		track(model, kind)
@@ -117,22 +128,28 @@ for _, entry in ipairs({ { TYPING_TAG, "Typing" }, { TALKING_TAG, "Talking" } })
 	CollectionService:GetInstanceRemovedSignal(tag):Connect(untrack)
 end
 
-local function animateTyping(entry, now)
+-- How much faster this worker works (1 = normal), set by the server.
+local function getWorkSpeed(model)
+	local speed = model:GetAttribute("WorkSpeed")
+	return typeof(speed) == "number" and math.max(speed, 0.1) or 1
+end
+
+local function animateTyping(entry, now, speed)
 	local joints, rig = entry.joints, entry.rig
 	for _, side in ipairs({ "right", "left" }) do
 		local isLeft = side == "left"
 		local joint = joints[side]
-		local tap = math.sin(now * TAP_SPEED + entry.phase + (isLeft and math.pi or 0))
+		local tap = math.sin(now * TAP_SPEED * speed + entry.phase + (isLeft and math.pi or 0))
 		local angle = math.rad(ARM_RAISE_DEGREES + TAP_DEGREES * tap)
 		joint.motor.C0 = rig.arm(joint.baseC0, angle, isLeft)
 	end
 end
 
-local function animateTalking(entry, now)
+local function animateTalking(entry, now, speed)
 	local joints, rig = entry.joints, entry.rig
 	-- A gesture is a smooth bump that comes round every few seconds, with a
 	-- little hand wobble while it lasts.
-	local wave = math.max(0, math.sin(now * GESTURE_SPEED + entry.phase))
+	local wave = math.max(0, math.sin(now * GESTURE_SPEED * speed + entry.phase))
 	local bump = wave ^ 4
 	local wobble = math.sin(now * 6 + entry.phase) * 8 * bump
 	local rightAngle = math.rad(REST_ARM_DEGREES + GESTURE_DEGREES * bump + wobble)
@@ -143,6 +160,18 @@ local function animateTalking(entry, now)
 	if joints.neck then
 		local yaw = math.rad(HEAD_TURN_DEGREES * math.sin(now * HEAD_TURN_SPEED + entry.phase * 1.7))
 		joints.neck.motor.C0 = rig.head(joints.neck.baseC0, yaw)
+	end
+end
+
+local function animateSupervising(entry, now)
+	local joints, rig = entry.joints, entry.rig
+	joints.left.motor.C0 = rig.arm(joints.left.baseC0, math.rad(CLIPBOARD_ARM_DEGREES), true)
+	joints.right.motor.C0 = rig.arm(joints.right.baseC0, math.rad(5), false)
+	if joints.neck then
+		local yaw = math.rad(SCAN_DEGREES * math.sin(now * SCAN_SPEED + entry.phase))
+		-- A short nod every few seconds, as if approving the work.
+		local nod = math.max(0, math.sin(now * 0.9 + entry.phase * 2)) ^ 8
+		joints.neck.motor.C0 = rig.head(joints.neck.baseC0, yaw, -math.rad(NOD_DEGREES) * nod)
 	end
 end
 
@@ -165,10 +194,13 @@ RunService.RenderStepped:Connect(function()
 
 			local root = model:FindFirstChild("HumanoidRootPart")
 			if entry.joints and root and (root.Position - cameraPosition).Magnitude <= MAX_ANIMATE_DISTANCE then
+				local speed = getWorkSpeed(model)
 				if entry.kind == "Talking" then
-					animateTalking(entry, now)
+					animateTalking(entry, now, speed)
+				elseif entry.kind == "Supervisor" then
+					animateSupervising(entry, now)
 				else
-					animateTyping(entry, now)
+					animateTyping(entry, now, speed)
 				end
 			end
 		end

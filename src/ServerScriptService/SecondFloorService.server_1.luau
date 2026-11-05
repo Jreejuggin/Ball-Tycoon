@@ -17,7 +17,10 @@
 	  * Every purchase is an "Activated" / "UpgradeLevel" value inside the plot,
 	    which TycoonProgressService already saves, restores and resets.
 	  * Accent parts carry the PlotThemeAccent tag, so plot colors apply.
-	CubicleWorkstationService runs the cubicles this script builds.
+	CubicleWorkstationService runs the cubicles this script builds, and the office
+	tiers after them (Senior Workers, Team Lead, Department Manager) that
+	SecondFloorOfficeBuilder adds. The floor-2 Worker Centre is the Manager
+	Center (ManagerCenterBuilder builds it, ManagerCenterService runs it).
 
 	States per plot:
 	  Hidden    - Home Centre level 1 not finished: nothing of floor 2 shows.
@@ -32,6 +35,8 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local Workspace = game:GetService("Workspace")
 
 local Config = require(ServerScriptService:WaitForChild("SecondFloorConfig"))
+local OfficeBuilder = require(ServerScriptService:WaitForChild("SecondFloorOfficeBuilder"))
+local ManagerCenterBuilder = require(ServerScriptService:WaitForChild("ManagerCenterBuilder"))
 local PlotThemeConfig = require(ReplicatedStorage:WaitForChild("PlotThemeConfig"))
 local PurchaseEffectModule = require(ReplicatedStorage:WaitForChild("PurchaseEffectModule"))
 local PurchaseSoundModule = require(ReplicatedStorage:WaitForChild("PurchaseSoundModule"))
@@ -380,6 +385,72 @@ local function buildFloorSlab(floorPart, firstFloorRoof, floorTop, storey, holes
 	return parts
 end
 
+-- Each centre's zone floor and lock overlay are thin see-through sheets the
+-- size of the whole zone. Copied one storey up, the Home Centre's two would lie
+-- across the stairwell opening as a grey film. On floor 2 they are cut around
+-- the openings, like the slab: the largest piece stays the original part (it
+-- keeps the zone title and lock text), and the other pieces are bare copies
+-- marked ZonePieceOf so SecondFloorCentreService gives them the same look.
+local ZONE_SHEETS = { "ZoneFloor", "LockOverlay" }
+
+local function cutZoneSheetsAroundHoles(centreFolder, floorTop, holes)
+	for _, centre in ipairs(centreFolder:GetChildren()) do
+		local markers = centre:FindFirstChild("ZoneMarkers")
+		for _, sheetName in ipairs(ZONE_SHEETS) do
+			local sheet = markers and markers:FindFirstChild(sheetName)
+			if not (sheet and sheet:IsA("BasePart")) then
+				continue
+			end
+
+			-- Sheets lie flat and square to the plot; anything else is left alone.
+			local relative = floorTop:ToObjectSpace(sheet.CFrame)
+			if math.abs(relative.RightVector.X) < 0.99 or math.abs(relative.UpVector.Y) < 0.99 then
+				continue
+			end
+			local center = relative.Position
+			local halfX, halfZ = sheet.Size.X / 2, sheet.Size.Z / 2
+			local minX, maxX = center.X - halfX, center.X + halfX
+			local minZ, maxZ = center.Z - halfZ, center.Z + halfZ
+
+			local overlaps = false
+			for _, hole in ipairs(holes) do
+				if hole.x0 < maxX and hole.x1 > minX and hole.z0 < maxZ and hole.z1 > minZ then
+					overlaps = true
+					break
+				end
+			end
+			if not overlaps then
+				continue
+			end
+
+			local pieces = subtractHoles(minX, maxX, minZ, maxZ, holes)
+			table.sort(pieces, function(a, b)
+				return (a[3] - a[1]) * (a[4] - a[2]) > (b[3] - b[1]) * (b[4] - b[2])
+			end)
+
+			local template = sheet:Clone()
+			template:ClearAllChildren()
+			local rotation = relative - relative.Position
+			local function fit(part, piece)
+				part.Size = Vector3.new(piece[3] - piece[1], sheet.Size.Y, piece[4] - piece[2])
+				part.CFrame = floorTop * CFrame.new((piece[1] + piece[3]) / 2, center.Y, (piece[2] + piece[4]) / 2) * rotation
+			end
+			for index, piece in ipairs(pieces) do
+				if index == 1 then
+					fit(sheet, piece)
+				else
+					local extra = template:Clone()
+					extra.Name = sheetName .. "Piece"
+					extra:SetAttribute("ZonePieceOf", sheetName)
+					fit(extra, piece)
+					extra.Parent = markers
+				end
+			end
+			template:Destroy()
+		end
+	end
+end
+
 -- Floor 1's walls are authored non-collidable, so floor 2 gets an invisible
 -- solid barrier around its edge to stop players walking off.
 local function buildSafetyRails(floorPart, floorTop, storey, parent)
@@ -453,8 +524,8 @@ end
 
 -- What each floor-2 centre copies from its first-floor original: its values,
 -- zone markings and purchase pad. Working upgrade stations stay on floor 1
--- (see SecondFloorCentreService for why); the Worker Centre's props are added
--- separately as a decorative layout (buildWorkerCentreLayout).
+-- (see SecondFloorCentreService for why). The floor-2 Worker Centre becomes
+-- the Manager Center, built separately (buildManagerCenter).
 local CENTRE_KEEP = {
 	Activated = true,
 	Price = true,
@@ -501,105 +572,6 @@ local function hideCentre(centre)
 		elseif descendant:IsA("SurfaceGui") or descendant:IsA("BillboardGui") then
 			descendant.Enabled = false
 		end
-	end
-end
-
--- Things a decorative layout copy must not carry over from floor 1:
---   * values (Activated, Price, UpgradeLevel...), so TycoonProgressService
---     never saves them and no service mistakes them for a real purchase;
---   * purchase pads, prompts and click detectors, so nothing can be bought;
---   * runtime label anchors (small hidden parts holding a BillboardGui that
---     WorkerCountDisplayService / WorkerNotesGiftsStationService add on floor 1)
---     and any other billboards, so no floor-1 counters or prices show up here.
-local LAYOUT_STRIP_CLASSES = { "ValueBase", "BaseScript", "ProximityPrompt", "ClickDetector" }
-
-local function stripForLayout(root)
-	local buyPad = root:FindFirstChild("BuyPad")
-	if buyPad then
-		buyPad:Destroy()
-	end
-	for _, descendant in ipairs(root:GetDescendants()) do
-		if descendant.Parent == nil then
-			continue -- already removed with its parent
-		end
-		if descendant:IsA("BasePart") and descendant:FindFirstChildWhichIsA("BillboardGui") then
-			descendant:Destroy()
-			continue
-		end
-		if descendant:IsA("BillboardGui") then
-			descendant:Destroy()
-			continue
-		end
-		for _, className in ipairs(LAYOUT_STRIP_CLASSES) do
-			if descendant:IsA(className) then
-				descendant:Destroy()
-				break
-			end
-		end
-	end
-	-- Runtime attributes on the model itself (e.g. WorkersUnlocked). Names
-	-- starting with "RBX" are reserved by Roblox (import data) and can't be
-	-- changed by scripts, so they are left alone.
-	for name in pairs(root:GetAttributes()) do
-		if string.sub(name, 1, 3) ~= "RBX" then
-			root:SetAttribute(name, nil)
-		end
-	end
-end
-
--- Records how each layout part looks when its centre is bought. This is fixed
--- by role rather than read from floor 1, because floor 1's services may have
--- already hidden or ghosted those props when this copy is made:
---   * Collision proxies: invisible but solid (same as on floor 1).
---   * Everything else: visible and walk-through. The gift station keeps its
---     own "unlocked" transparency attribute when it has one.
--- Every part starts hidden; SecondFloorCentreService applies the states.
-local function prepareLayoutParts(model)
-	local collision = model:FindFirstChild("Collision")
-	for _, part in ipairs(model:GetDescendants()) do
-		if not part:IsA("BasePart") then
-			continue
-		end
-		local isCollision = collision ~= nil and part:IsDescendantOf(collision)
-		local solid = 0
-		if isCollision then
-			solid = 1
-		elseif typeof(part:GetAttribute("WorkerGiftsUnlockedTransparency")) == "number" then
-			solid = part:GetAttribute("WorkerGiftsUnlockedTransparency")
-		end
-		part:SetAttribute("SolidTransparency", solid)
-		part:SetAttribute("LayoutCollision", isCollision)
-		part.Anchored = true
-		part.Transparency = 1
-		part.CanCollide = false
-		part.CanTouch = false
-		part.CanQuery = false
-		part.CastShadow = false
-	end
-end
-
--- Copies floor 1's Worker Centre props (Config.WorkerCentreLayout) one storey
--- up into <floor-2 Worker Centre>/Layout. ThemedModel and PlotThemeAccent tags
--- are kept, so PlotThemeService colors the copies like the originals.
-local function buildWorkerCentreLayout(plot, centre, storey)
-	local folder = Instance.new("Folder")
-	folder.Name = Config.LayoutFolderName
-	folder.Parent = centre
-
-	for _, path in ipairs(Config.WorkerCentreLayout) do
-		local source = findChildPath(plot, table.unpack(path))
-		if not (source and source:IsA("Model")) then
-			warn(("[SecondFloorService] %s has no %s; left out of the floor-2 Worker Centre."):format(
-				plot.Name,
-				table.concat(path, ".")
-			))
-			continue
-		end
-		local copy = source:Clone()
-		stripForLayout(copy)
-		liftParts(copy, storey)
-		prepareLayoutParts(copy)
-		copy.Parent = folder
 	end
 end
 
@@ -672,6 +644,31 @@ local function buildHomeStructures(firstHome, home, floorTop, storey)
 	return slots
 end
 
+-- Floor 2's Worker Centre is the Manager Center: an office building, a
+-- supervisor pad and a Productivity Training pad (ManagerCenterBuilder). Its
+-- pads copy floor 1's worker pad and Worker Speed pad, at the same spots.
+local function buildManagerCenter(plot, firstCentre, centre, floorTop, storey)
+	local supervisorPad = findChildPath(firstCentre, "Upgrades", "WorkerBuyPad")
+	local trainingPad = findChildPath(firstCentre, "Upgrades", "WorkerSpeedUpgrade", "BuyPad")
+	local firstSource = Config.CubicleSources[1]
+	local dropperPad = findChildPath(plot, firstSource.folder, firstSource.slots[1], "BuyPad", "Head")
+	supervisorPad = (supervisorPad and supervisorPad:IsA("BasePart")) and supervisorPad or dropperPad
+	trainingPad = (trainingPad and trainingPad:IsA("BasePart")) and trainingPad or dropperPad
+	if not (supervisorPad and trainingPad) then
+		warn("[SecondFloorService] " .. plot.Name .. " has no pads to copy; Manager Center not built.")
+		return
+	end
+	ManagerCenterBuilder.Build({
+		centre = centre,
+		floorTop = floorTop,
+		storey = storey,
+		plotColor = getPlotColor(plot),
+		accentTag = PlotThemeConfig.AccentPartTag,
+		supervisorPadTemplate = supervisorPad,
+		trainingPadTemplate = trainingPad,
+	})
+end
+
 -- Copies every first-floor centre one storey up. Returns the floor-2
 -- CentreSlots folder and the floor-2 Home Centre's StructureSlots.
 local function buildCentres(plot, floorTop, storey, secondFloor)
@@ -725,9 +722,9 @@ local function buildCentres(plot, floorTop, storey, secondFloor)
 		end
 
 		hideCentre(centre)
-		-- Built after hideCentre: layout parts record their own solid look.
+		-- Built after hideCentre: the Manager Center records its own solid look.
 		if centreName == "Centre01_Worker" then
-			buildWorkerCentreLayout(plot, centre, storey)
+			buildManagerCenter(plot, source, centre, floorTop, storey)
 		end
 		centre.Parent = folder
 	end
@@ -936,12 +933,32 @@ local function buildSecondFloor(plot)
 	local rails = buildSafetyRails(floorPart, floorTop, storey, slabFolder)
 
 	local floorPad = buildFloorPad(padSource, floorTop, secondFloor)
-	local _, secondFloorSlots = buildCentres(plot, floorTop, storey, secondFloor)
+	local secondFloorCentres, secondFloorSlots = buildCentres(plot, floorTop, storey, secondFloor)
+	cutZoneSheetsAroundHoles(secondFloorCentres, floorTop, holes)
 
 	local cubicleFolder = Instance.new("Folder")
 	cubicleFolder.Name = "Cubicles"
 	cubicleFolder.Parent = secondFloor
 	buildCubicles(plot, floorTop, storey, plotColor, cubicleFolder)
+
+	-- Senior cubicles, Team Lead meeting room and Department Manager office,
+	-- above the rest of floor 1's machine lane. Their pads copy the first
+	-- dropper's pad, like the cubicles' do.
+	local firstSource = Config.CubicleSources[1]
+	local padTemplate = findChildPath(plot, firstSource.folder, firstSource.slots[1], "BuyPad", "Head")
+	if padTemplate and padTemplate:IsA("BasePart") then
+		OfficeBuilder.Build({
+			plot = plot,
+			floorTop = floorTop,
+			storey = storey,
+			plotColor = plotColor,
+			accentTag = PlotThemeConfig.AccentPartTag,
+			padTemplate = padTemplate,
+			secondFloor = secondFloor,
+		})
+	else
+		warn("[SecondFloorService] " .. plot.Name .. " has no dropper pad to copy; office tiers not built.")
+	end
 
 	local lightsGroup = "CeilingLights" .. Config.GroupSuffix
 	local lights = collectGroupLights(shell, lightsGroup)

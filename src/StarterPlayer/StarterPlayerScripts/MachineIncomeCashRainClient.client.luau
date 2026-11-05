@@ -122,7 +122,7 @@ local function createCashBill(layer)
 	bill.ZIndex = 2
 	bill.Rotation = math.random(-24, 24)
 	-- Large billboard-scale cash images: roughly 15-20x the original subtle bills.
-	bill.Size = UDim2.fromScale(math.random(320, 440) / 100, math.random(360, 520) / 100)
+	bill.Size = UDim2.fromScale(math.random(50, 70) / 100, math.random(360, 520) / 100)
 	bill.Position = UDim2.fromScale(math.random(18, 82) / 100, math.random(16, 70) / 100)
 	bill.Parent = layer
 
