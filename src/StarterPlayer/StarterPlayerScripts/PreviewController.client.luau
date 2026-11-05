@@ -11,6 +11,11 @@
 -- SecondFloorService). Floor-2 structure groups carry a floor suffix
 -- ("Walls_F2"), which is stripped so both floors share one set of icons.
 --
+-- The Second Floor purchase pad (SecondFloorService's FloorBuyPad) gets the
+-- same floating icon. It has no CurrentStructure attribute: its icon shows
+-- whenever the server shows the pad (the floor is up for sale), and hides
+-- once the pad hides again (bought, or not unlocked yet).
+--
 -- Purely cosmetic. No purchase logic lives on the client.
 
 local Players = game:GetService("Players")
@@ -48,6 +53,7 @@ local STRUCTURE_STYLES = {
 	LaserDoor     = { emoji = "🚪", label = "Laser Door", color = Color3.fromRGB(255, 100, 100) },
 	Roof          = { emoji = "🏠", label = "Roof",       color = Color3.fromRGB(150, 150, 150) },
 	CeilingLights = { emoji = "💡", label = "Lights",     color = Color3.fromRGB(255, 255, 100) },
+	SecondFloor   = { emoji = "🏢", label = "2nd Floor",  color = Color3.fromRGB(70, 160, 255) },
 }
 
 local previews = {}   -- [pad] = { anchor, frame, emojiLabel, nameLabel, group, time }
@@ -56,6 +62,12 @@ local previews = {}   -- [pad] = { anchor, frame, emojiLabel, nameLabel, group, 
 local PAD_PATHS = {
 	{ "CentreSlots", "Centre02_Home", "StructureBuyPad" },                -- floor 1
 	{ "SecondFloor", "CentreSlots", "Centre02_Home", "StructureBuyPad" }, -- floor 2
+}
+
+-- Pads that always offer the same upgrade. Their icon follows the pad's own
+-- visibility instead of a CurrentStructure attribute.
+local FIXED_PADS = {
+	{ path = { "SecondFloor", "FloorBuyPad" }, style = "SecondFloor" },
 }
 
 local function findChildPath(root, path)
@@ -180,15 +192,22 @@ end
 --------------------------------------------------------------------
 -- Update
 --------------------------------------------------------------------
-local function updatePad(plot, pad, dt)
+local function updatePad(plot, pad, dt, fixedStyle)
 	local preview = previews[pad]
 	if not preview then
 		preview = buildPreview(pad)
 		previews[pad] = preview
 	end
 
-	local groupName = pad:GetAttribute("CurrentStructure")
-	local mode = pad:GetAttribute("StructurePreviewMode")
+	local groupName, mode
+	if fixedStyle then
+		-- Shown only while the server shows the pad (Transparency below 1).
+		groupName = pad.Transparency < 1 and fixedStyle or ""
+		mode = "Purchase"
+	else
+		groupName = pad:GetAttribute("CurrentStructure")
+		mode = pad:GetAttribute("StructurePreviewMode")
+	end
 	local isAvailablePreview = mode == "CentreAvailable"
 	local isOwnedByLocalPlayer = tonumber(plot:GetAttribute("Owner")) == player.UserId
 	local shouldShow = type(groupName) == "string"
@@ -233,6 +252,12 @@ RunService.RenderStepped:Connect(function(dt)
 				local pad = findChildPath(plot, path)
 				if pad and pad:IsA("BasePart") then
 					updatePad(plot, pad, dt)
+				end
+			end
+			for _, fixed in ipairs(FIXED_PADS) do
+				local pad = findChildPath(plot, fixed.path)
+				if pad and pad:IsA("BasePart") then
+					updatePad(plot, pad, dt, fixed.style)
 				end
 			end
 		end

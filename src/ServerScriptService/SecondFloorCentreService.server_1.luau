@@ -20,10 +20,10 @@
 
 	Upgrades inside the centres: the Home Centre's structures (walls, glass,
 	roof, lights) are sold on floor 2 by StructureSequenceService. The Worker
-	Centre shows a decorative copy of floor 1's layout (Hiring Kiosk, speed
-	sign, notes & gifts station), ghosted while available and solid once
-	bought. The other centres' floor-1 upgrades are not copied: Worker hiring serves floor 1's
-	droppers, and Avatar items are per-player tools and boosts, so second copies
+	Centre is the Manager Center: its office building (Layout) is ghosted while
+	available and solid once bought; ManagerCenterService sells its supervisors
+	and training. The other centres' floor-1 upgrades are not copied: Avatar
+	items are per-player tools and boosts, so second copies
 	would charge again for things the player already owns. Orb and Pet have no
 	upgrades yet. Their floor-2 zones are ready for upgrades when designed.
 ]]
@@ -83,29 +83,36 @@ local function setGuiEnabled(gui, enabled)
 end
 
 ---------------------------------------------------------------------------
--- Decorative layout props (floor-2 Worker Centre)
+-- Centre layout (the floor-2 Manager Center building)
 -- Same three looks CentreZoneService gives floor 1's Hiring Kiosk:
 --   Hidden  - centre locked (or floor 2 not bought): invisible, no collision.
---   Ghost   - centre available: see-through preview; collision proxies solid.
---   Visible - centre bought: solid look; collision proxies solid.
--- SecondFloorService records each part's SolidTransparency and whether it is
--- a collision proxy (LayoutCollision) when it builds the copy.
+--   Ghost   - centre available: see-through preview, walk-through.
+--   Visible - centre bought: solid look; parts marked SolidCanCollide (walls)
+--             block players; signs and boards show their text.
+-- ManagerCenterBuilder records each part's SolidTransparency, SolidCanCollide
+-- and whether it is an invisible collision proxy (LayoutCollision).
 ---------------------------------------------------------------------------
 
 local function collectLayoutParts(centre)
 	local parts = {}
+	local guis = {}
 	local folder = centre:FindFirstChild(Config.LayoutFolderName)
 	if folder then
 		for _, descendant in ipairs(folder:GetDescendants()) do
 			if descendant:IsA("BasePart") then
 				table.insert(parts, descendant)
+			elseif descendant:IsA("SurfaceGui") then
+				table.insert(guis, descendant)
 			end
 		end
 	end
-	return parts
+	return parts, guis
 end
 
-local function applyLayoutMode(parts, mode)
+local function applyLayoutMode(parts, guis, mode)
+	for _, gui in ipairs(guis) do
+		gui.Enabled = mode == "Visible"
+	end
 	for _, part in ipairs(parts) do
 		local isCollision = part:GetAttribute("LayoutCollision") == true
 		local solid = part:GetAttribute("SolidTransparency") or 0
@@ -127,9 +134,10 @@ local function applyLayoutMode(parts, mode)
 			part.CanQuery = false
 			part.CastShadow = false
 		else -- Visible
+			local solidCollide = part:GetAttribute("SolidCanCollide") == true
 			part.Transparency = solid
-			part.CanCollide = false
-			part.CanQuery = false
+			part.CanCollide = solidCollide
+			part.CanQuery = solidCollide
 			part.CastShadow = solid < 1
 		end
 		part.CanTouch = false
@@ -141,6 +149,7 @@ end
 ---------------------------------------------------------------------------
 
 local function makeRecord(centre)
+	local layoutParts, layoutGuis = collectLayoutParts(centre)
 	local markers = centre:FindFirstChild("ZoneMarkers")
 	local pad = centre:FindFirstChild("BuyPad")
 	local zoneFloor = markers and markers:FindFirstChild("ZoneFloor")
@@ -157,10 +166,15 @@ local function makeRecord(centre)
 	end
 
 	-- Any other marker parts are just restored to their authored look.
+	-- Pieces of a zone sheet cut around the stairwell (SecondFloorService
+	-- marks them ZonePieceOf) copy their sheet's look instead.
 	local otherParts = {}
+	local sheetPieces = {}
 	if markers then
 		for _, descendant in ipairs(markers:GetDescendants()) do
-			if descendant:IsA("BasePart") and not MANAGED_MARKERS[descendant.Name] then
+			if descendant:IsA("BasePart") and descendant:GetAttribute("ZonePieceOf") then
+				table.insert(sheetPieces, descendant)
+			elseif descendant:IsA("BasePart") and not MANAGED_MARKERS[descendant.Name] then
 				table.insert(otherParts, descendant)
 			end
 		end
@@ -182,7 +196,9 @@ local function makeRecord(centre)
 		priceText = priceGui and priceGui:FindFirstChild("PriceText"),
 		edges = edges,
 		otherParts = otherParts,
-		layoutParts = collectLayoutParts(centre),
+		sheetPieces = sheetPieces,
+		layoutParts = layoutParts,
+		layoutGuis = layoutGuis,
 		layoutMode = nil, -- last applied mode, so the 0.5s poll doesn't rewrite parts
 		processing = false,
 	}
@@ -294,8 +310,21 @@ local function setupPlot(plot)
 		end
 	end
 
+	-- Zone sheet pieces always look exactly like the sheet they were cut from.
+	local function syncSheetPieces(record)
+		for _, piece in ipairs(record.sheetPieces) do
+			local sheetName = piece:GetAttribute("ZonePieceOf")
+			local sheet = sheetName == "ZoneFloor" and record.zoneFloor or record.overlay
+			if sheet then
+				piece.Transparency = sheet.Transparency
+				piece.Color = sheet.Color
+				piece.Material = sheet.Material
+			end
+		end
+	end
+
 	-- Mirrors CentreZoneService.updateSlotVisual for the three visible states.
-	local function applyRecord(record)
+	local function applyRecordState(record)
 		local state = getState(record)
 		if record.status and record.status:IsA("StringValue") then
 			-- StructureSequenceService reads "Available" for its Walls preview.
@@ -305,7 +334,7 @@ local function setupPlot(plot)
 		local layoutMode = (state == "Purchased" and "Visible") or (state == "Available" and "Ghost") or "Hidden"
 		if #record.layoutParts > 0 and layoutMode ~= record.layoutMode then
 			record.layoutMode = layoutMode
-			applyLayoutMode(record.layoutParts, layoutMode)
+			applyLayoutMode(record.layoutParts, record.layoutGuis, layoutMode)
 		end
 
 		if state == "Hidden" then
@@ -395,6 +424,11 @@ local function setupPlot(plot)
 			record.titleText.TextColor3 = accentColor
 			record.titleText.TextTransparency = 0.08
 		end
+	end
+
+	local function applyRecord(record)
+		applyRecordState(record)
+		syncSheetPieces(record)
 	end
 
 	local function applyAll()
