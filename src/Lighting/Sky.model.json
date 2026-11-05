@@ -1,0 +1,14 @@
+{
+  "className": "Sky",
+  "properties": {
+    "SkyboxUpContent": "http://www.roblox.com/asset/?id=6778658364",
+    "SkyboxDownContent": "http://www.roblox.com/asset/?id=6778658683",
+    "SourceAssetId": 6799834843.0,
+    "SkyboxBackContent": "http://www.roblox.com/asset/?id=6778646360",
+    "SkyboxLeftContent": "http://www.roblox.com/asset/?id=6778649136",
+    "SunTextureContent": "rbxassetid://6679618752",
+    "SkyboxFrontContent": "http://www.roblox.com/asset/?id=6778648039",
+    "SunAngularSize": 20.0,
+    "SkyboxRightContent": "http://www.roblox.com/asset/?id=6778650519"
+  }
+}

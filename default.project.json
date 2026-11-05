@@ -1,11 +1,7 @@
-
-
 {
   "name": "Ball-Tycoon",
   "globIgnorePaths": [
-    "src/ReplicatedStorage/Design/**",
-    "src/ServerStorage/LegacyAssets",
-    "src/ServerStorage/LegacyAssets/**"
+    "src/ReplicatedStorage/Design/**"
   ],
   "servePlaceIds": [
     95130979463573,
@@ -13,42 +9,35 @@
     110960581920330,
     118145318641243,
     76799559493471
-    
   ],
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": {
-      "$path": "src/ReplicatedStorage",
-      "$ignoreUnknownInstances": true
+      "$ignoreUnknownInstances": true,
+      "$path": "src/ReplicatedStorage"
     },
     "ServerScriptService": {
-      "$path": "src/ServerScriptService",
-      "$ignoreUnknownInstances": true
+      "$ignoreUnknownInstances": true,
+      "$path": "src/ServerScriptService"
     },
     "ServerStorage": {
-      "$path": "src/ServerStorage",
       "$ignoreUnknownInstances": true,
-      "LegacyAssets": {
-        "$className": "Folder",
-        "$ignoreUnknownInstances": true
-      }
+      "$path": "src/ServerStorage"
     },
     "SoundService": {
       "$className": "SoundService",
+      "$properties": {
+        "RespectFilteringEnabled": true
+      },
       "$ignoreUnknownInstances": true,
-      "SFX": {
-        "$className": "SoundGroup",
-        "$properties": {
-          "Volume": 1
-        }
-      }
+      "$path": "src/SoundService"
     },
     "StarterGui": {
       "$properties": {
         "ScreenOrientation": "Sensor"
       },
-      "$path": "src/StarterGui",
-      "$ignoreUnknownInstances": true
+      "$ignoreUnknownInstances": true,
+      "$path": "src/StarterGui"
     },
     "StarterPlayer": {
       "$properties": {
@@ -57,8 +46,8 @@
         "CharacterBreakJointsOnDeath": false,
         "CharacterUseJumpPower": false
       },
-      "$path": "src/StarterPlayer",
-      "$ignoreUnknownInstances": true
+      "$ignoreUnknownInstances": true,
+      "$path": "src/StarterPlayer"
     },
     "Workspace": {
       "$properties": {
@@ -99,7 +88,83 @@
           }
         }
       },
-      "$path": "src/Workspace",
+      "$ignoreUnknownInstances": true,
+      "$path": "src/Workspace"
+    },
+    "Chat": {
+      "$className": "Chat",
+      "$properties": {
+        "BubbleChatEnabled": true
+      },
+      "$ignoreUnknownInstances": true
+    },
+    "Lighting": {
+      "$className": "Lighting",
+      "$properties": {
+        "Ambient": [
+          0.27450981736183167,
+          0.27450981736183167,
+          0.27450981736183167
+        ],
+        "Brightness": 3.0,
+        "EnvironmentDiffuseScale": 1.0,
+        "EnvironmentSpecularScale": 1.0,
+        "FogColor": [
+          0.7529412508010864,
+          0.7529412508010864,
+          0.7529412508010864
+        ],
+        "GeographicLatitude": 0.0,
+        "GlobalShadows": true,
+        "OutdoorAmbient": [
+          0.27450981736183167,
+          0.27450981736183167,
+          0.27450981736183167
+        ],
+        "Outlines": false,
+        "PrioritizeLightingQuality": true,
+        "ShadowSoftness": 0.20000000298023224,
+        "TimeOfDay": "14:30:00",
+        "LightingStyle": {
+          "Enum": 1
+        }
+      },
+      "$path": "src/Lighting",
+      "$ignoreUnknownInstances": true
+    },
+    "LocalizationService": {
+      "$className": "LocalizationService",
+      "$ignoreUnknownInstances": true
+    },
+    "MaterialService": {
+      "$className": "MaterialService",
+      "$ignoreUnknownInstances": true
+    },
+    "Players": {
+      "$className": "Players",
+      "$properties": {
+        "RespawnTime": 3.0
+      },
+      "$ignoreUnknownInstances": true
+    },
+    "ReplicatedFirst": {
+      "$className": "ReplicatedFirst",
+      "$ignoreUnknownInstances": true
+    },
+    "StarterPack": {
+      "$className": "StarterPack",
+      "$ignoreUnknownInstances": true
+    },
+    "Teams": {
+      "$className": "Teams",
+      "$ignoreUnknownInstances": true
+    },
+    "TextChatService": {
+      "$className": "TextChatService",
+      "$properties": {
+        "ChatVersion": "TextChatService"
+      },
+      "$path": "src/TextChatService",
       "$ignoreUnknownInstances": true
     }
   }
