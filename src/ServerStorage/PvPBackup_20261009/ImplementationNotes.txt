@@ -1,0 +1,15 @@
+New: PvPConfig, PvPRemotes (Action, Feedback, Impact), PvPCombatService, PvPCombatController, PvPCombatClient.
+Changed: CombatDamageService, KnockbackPlankService, ThrowableBallCombatService and KnockbackPlank.ToolClient.
+Original sources are siblings of this note. KnockbackPlankToolClient maps to ServerStorage.Tools.KnockbackPlank.ToolClient.
+Full rollback: restore the original sources and remove the new objects listed above.
+Temporary disable for the next Play: set Enabled=false in ReplicatedStorage.PvPConfig.
+Keyboard: Mouse/R attack; F guard; E dodge; Q timed recovery.
+Controller: R2 attack; L2 guard; B dodge; X timed recovery.
+Touch: Attack, Guard, Dodge, Rise.
+3 hits on the same opponent within 3.2 seconds give a finisher; alternate weapons for a 15% bonus.
+Guard lasts 0.55 seconds; the first 0.22 seconds parry. Cooldown: 2.4 seconds.
+Dodge cooldown: 3 seconds. Heavy-hit recovery: 0.32-0.82 seconds; perfect: 0.50-0.68 seconds.
+KO/streak counters last for this server session.
+Validation: 36 two-client checks plus death, guarded knockout and duplicate-credit edge cases passed.
+UI checked at desktop, phone landscape/portrait, and console resolution.
+Player saves were protected with an in-memory writer during testing; the production writer was restored.

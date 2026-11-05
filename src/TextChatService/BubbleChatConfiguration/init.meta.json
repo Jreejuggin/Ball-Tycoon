@@ -1,0 +1,13 @@
+{
+  "properties": {
+    "Font": "BuilderSansMedium",
+    "FontFace": {
+      "family": "rbxasset://fonts/families/BuilderSans.json",
+      "weight": "Medium",
+      "style": "Normal",
+      "cachedFaceId": "rbxasset://fonts/BuilderSans-Medium.otf"
+    },
+    "TextSize": 20.0
+  },
+  "className": "BubbleChatConfiguration"
+}

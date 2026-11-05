@@ -9,6 +9,7 @@ local Tutorial = require(script.Parent.TutorialProgressService)
 local WorkerGifts = require(script.Parent.WorkerGiftCooldownService)
 local Orbs = require(script.Parent.OrbInventoryService)
 local Receipts = require(script.Parent.PurchaseReceiptService)
+local Pets = require(script.Parent.PetInventoryService)
 
 
 -- Private save helpers: do not also call the older PlayerDataSaveService writer.
@@ -186,6 +187,7 @@ local SaveService = (function()
 			LastWorkerGiftClaim = WorkerGifts.Serialize(player),
 			OrbPurchaseCooldowns = Orbs.Serialize(player),
 			ProcessedReceipts = Receipts.Serialize(player),
+			PetInventory = Pets.Serialize(player),
 		})
 	end
 
@@ -399,6 +401,7 @@ local function initializePlayer(player)
 		WorkerGifts.Resolve(player, true, savedData)
 		Orbs.Resolve(player, savedData)
 		Receipts.Resolve(player, savedData)
+		Pets.Resolve(player, savedData)
 		-- Assignment and inventory initialization may only begin after all restores.
 		player:SetAttribute("DataLoaded", true)
 	end, debug.traceback)
@@ -420,6 +423,9 @@ Players.PlayerRemoving:Connect(function(player)
 end)
 
 Receipts.Start(function(player)
+	return SaveService.Save(player, false)
+end)
+Pets.SetSaveCallback(function(player)
 	return SaveService.Save(player, false)
 end)
 Players.PlayerAdded:Connect(initializePlayer)

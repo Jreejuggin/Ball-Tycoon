@@ -1,0 +1,1 @@
+{"OrbPurchaseCooldowns":[],"Tutorial":{"Completed":true,"StepIndex":0,"SchemaVersion":1,"Skipped":true},"BankedGems":0,"Gems":0,"PurchasedItems":{"Orb_Speed":1,"Orb_Protection":1},"CentreLevel":4,"LastWorkerGiftClaim":0,"UpgradeLevel":1,"TycoonProgress":{"SchemaVersion":2,"Values":[]},"Cash":4947430}
